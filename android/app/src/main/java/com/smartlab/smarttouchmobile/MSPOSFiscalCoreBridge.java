@@ -17,13 +17,14 @@ import com.ansca.corona.CoronaEnvironment;
 import com.multisoft.drivers.fiscalcore.IFiscalCore;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 
 public class MSPOSFiscalCoreBridge {
     // IFiscalCore:  http://doc.multisoft.ru/doc/MSPOS/html/
     // Namespace Reference: //  http://doc.multisoft.ru/doc/MSPOS/html/namespacecom_1_1multisoft_1_1drivers_1_1fiscalcore.html
     // components: http://doc.multisoft.ru/doc/MSPOS/
+    // wiki: http://77.243.109.96:8881/redmine/projects/mspos-k/wiki/QA
+
     private static final String TAG = "smarttouchpos";
 
     final static String REMOTE_SERVICE_ACTION_NAME = "com.multisoft.drivers.fiscalcore.IFiscalCore";
@@ -218,42 +219,73 @@ public class MSPOSFiscalCoreBridge {
     public void printCheque(Map<String, Object> data) throws Exception {
         Log.i(TAG, "printCheque(data)");
 
-        Boolean isReturn = (Boolean) data.get("is_refund");
         String address = (String) data.get("phone_number");
 
-        int recType = 0;
-        if (((Double) data.get("pmt_type")).intValue() == 1) recType = 1;
+        int recType = (((Boolean) data.get("is_refund")) == true) ? 3 : 1;
 
-        System.out.printf("\n");
-        HashMap<String, Object> items = (HashMap) data.get("items");
-        for (Map.Entry<String, Object> row: items.entrySet()) {
-            System.out.printf("==================== item no: " + row.getKey() + "\n");
-            HashMap<String, Object> item = (HashMap) row.getValue();
-            for (Map.Entry<String, Object> pair: item.entrySet()) {
-                System.out.printf("========== item key: " + pair.getKey() + ", value: " +  pair.getValue() + "\n");
-            }
+        int payType = 0;
+        String payTypeName = "НАЛИЧНЫМИ:";
+        if (((Double) data.get("pmt_type")).intValue() == 1) {
+            payType = 1;
+            payTypeName = "ЭЛЕКТРОННЫМИ:";
         }
+
+        String cash = "0.00";
 
         // RecType { RecType.Sell = 1, RecType.SellRefund = 3, RecType.Buy = 2, RecType.BuyRefund = 4,
         //            RecType.CorrectionRec = 19, RecType.PayIn = 7, RecType.PayOut = 8, RecType.Unfiscal = 9 }
         // PayType { PayType.Cash = 0, PayType.Card, PayType.Bank, PayType.Voucher, PayType.Tare }
 
-//        checkDocState();
-//
-//        fiscalCore.OpenRec((isReturn) ? 3 : 1, callback);
-//        //fiscalCore.PrintRecItem("1", cash, "НАЛИЧНЫМИ:", "", callback);
-//        HashMap<String, Object> goods = (HashMap) data.get("items");
-//        for (Map.Entry<String, Object> row: items.entrySet()) {
-//            System.out.printf("===================== item no: " + row.getKey() + "\n");
-//            HashMap<String, Object> item = (HashMap) row.getValue();
-//            if (item != null) {
-//
-//            }
-//        }
-//        //fiscalCore.PrintRecTotal(callback);
-//        //fiscalCore.PrintRecItemPay(PayTypeCash, cash, "НАЛИЧНЫМИ:", callback);
-//        fiscalCore.CloseRec(callback);
-//        callback.Complete();
+        checkDocState();
+
+        fiscalCore.OpenRec(recType, callback);
+
+        System.out.println("--->");
+        HashMap<String, Object> items = (HashMap) data.get("items");
+        for (Map.Entry<String, Object> row: items.entrySet()) {
+            System.out.printf("===================== item no: " + row.getKey() + "\n");
+            HashMap<String, Object> item = (HashMap) row.getValue();
+            for (Map.Entry<String, Object> pair: item.entrySet()) {
+                System.out.printf("========== item key: " + pair.getKey() + ", value: " +  pair.getValue() + "\n");
+            }
+            if (item != null) {
+                fiscalCore.SetItemTaxes((Integer) item.get("taxGroup"), callback);
+                fiscalCore.SetShowTaxes(true, callback);    // включить отрисовку налога
+
+                Double amount = (Double) item.get("amount");
+                if (amount == null) amount = .000;
+                String count = String.format("%.3f", amount);
+
+                Double discount = (Double) item.get("discount");
+                if (discount == null) discount = .00;
+                Double sum = (Double) item.get("price");
+                if (sum == null) sum = .00;
+                String total = String.format("%.2f", (sum - discount));
+
+                Object art = item.get("code");
+                String article;
+                if (art instanceof String)
+                    article = (String) art;
+                else if (art instanceof Double)
+                    article = String.format("%d", ((Double) art).intValue());
+                else if (art instanceof Integer)
+                    article = String.format("%d", (Integer) art);
+                else
+                    article = "";
+
+                String itemName = (String) item.get("name");
+                if (itemName == null) itemName = "";
+
+                fiscalCore.PrintRecItem(count, total, itemName, article, callback);
+            }
+        }
+        fiscalCore.PrintRecTotal(callback);
+        if (address != null && !address.isEmpty()) {
+            fiscalCore.SendClientAddress(address, callback);
+        }
+        fiscalCore.PrintRecItemPay(payType, cash, payTypeName, callback);
+        fiscalCore.CloseRec(callback);
+        callback.Complete();
     }
 
 
