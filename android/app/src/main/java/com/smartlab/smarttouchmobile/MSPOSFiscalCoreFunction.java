@@ -7,6 +7,8 @@ package com.smartlab.smarttouchmobile;
 
 import android.util.Log;
 
+import java.util.HashMap;
+
 /**
  * Implements the msposFiscalCoreFunction() function in Lua.
  * <p>
@@ -23,6 +25,82 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
     @Override
     public String getName() {
         return "msposFiscalCore";
+    }
+
+    public HashMap<String, Object> extractData(com.naef.jnlua.LuaState luaState, int luaTableStackIndex) {
+        HashMap<String, Object> data = new HashMap<>();
+
+        try {
+            // Print all of the key/value paris in the Lua table.
+            System.out.printf("printTable(%d)\n", luaTableStackIndex);
+            System.out.println("{");
+            for (luaState.pushNil(); luaState.next(luaTableStackIndex); luaState.pop(1)) {
+                // Fetch the table entry's string key.
+                // An index of -2 accesses the key that was pushed into the Lua stack by luaState.next() up above.
+                String keyName = null;
+                com.naef.jnlua.LuaType luaType = luaState.type(-2);
+                switch (luaType) {
+                    case STRING:
+                        // Fetch the table entry's string key.
+                        keyName = luaState.toString(-2);
+                        break;
+                    case NUMBER:
+                        // The key will be a number if the given Lua table is really an array.
+                        // In this case, the key is an array index. Do not call luaState.toString() on the
+                        // numeric key or else Lua will convert the key to a string from within the Lua table.
+                        keyName = Integer.toString(luaState.toInteger(-2));
+                        break;
+                }
+                if (keyName == null) {
+                    // A valid key was not found. Skip this table entry.
+                    continue;
+                }
+
+                // Fetch the table entry's value in string form.
+                // An index of -1 accesses the entry's value that was pushed into the Lua stack by luaState.next() above.
+                String valueString;
+                Object value;
+                luaType = luaState.type(-1);
+                switch (luaType) {
+                    case STRING:
+                        value = luaState.toString(-1);
+                        valueString = (String) value;
+                        break;
+                    case BOOLEAN:
+                        value = luaState.toBoolean(-1);
+                        valueString = Boolean.toString((Boolean) value);
+                        break;
+                    case NUMBER:
+                        value = luaState.toNumber(-1);
+                        valueString = Double.toString((Double) value);
+                        break;
+                    case TABLE:
+                        value = extractData(luaState, -2);
+                        valueString = luaType.displayText();
+                        break;
+                    default:
+                        value = null;
+                        valueString = luaType.displayText();
+                        break;
+                }
+
+                if (valueString == null) {
+                    valueString = "";
+                }
+
+                // Print the table entry to the Android logging system.
+                System.out.println("   [" + keyName + "] = " + valueString);
+
+                data.put(keyName, value);
+            }
+            System.out.println("}");
+        }
+        catch (Exception ex) {
+            // An exception will occur if given an invalid argument or no argument. Print the error.
+            ex.printStackTrace();
+        }
+
+        return data;
     }
 
     /**
@@ -57,7 +135,11 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
                     break;
 
                 case "printCheque":
-                    msposFiscalCoreBridge.printCheque(luaState);
+                    // Check if the Lua function's first argument is a Lua table.
+                    // Will throw an exception if it is not a table or if no argument was given.
+                    luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
+                    msposFiscalCoreBridge.printCheque(extractData(luaState, 2));
+                    break;
 
                 case "cancelCheque":
                     msposFiscalCoreBridge.cancelCheque();
@@ -68,14 +150,14 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
                     break;
 
                 case "printNonFiscalCheque":
-                    msposFiscalCoreBridge.printNonFiscalCheque(new String(luaState.checkString(2)));
+                    msposFiscalCoreBridge.printNonFiscalCheque(luaState.checkString(2));
                     break;
 
                 case "cashIn":
-                    msposFiscalCoreBridge.cashIn(new String(luaState.checkString(2)));
+                    msposFiscalCoreBridge.cashIn(luaState.checkString(2));
                     break;
                 case "cashOut":
-                    msposFiscalCoreBridge.cashOut(new String(luaState.checkString(2)));
+                    msposFiscalCoreBridge.cashOut(luaState.checkString(2));
                     break;
             }
 
@@ -96,6 +178,8 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
 //            //       value to the luaState object's stack.
 //            luaState.call(0, 0);
 
+            luaState.pushNil(); // no errors here
+
         } catch (Exception ex) {
             // An exception will occur if the following happens:
             // 1) No argument was given.
@@ -104,9 +188,11 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
             ex.printStackTrace();
             System.out.println(ex.toString());
 
+            luaState.pushString(ex.toString()); // return error message
+
         }
 
         // Return 0 since this Lua function does not return any values.
-        return 0;
+        return 1;   // nil or error message
     }
 }
