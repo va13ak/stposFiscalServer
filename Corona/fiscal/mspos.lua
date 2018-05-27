@@ -16,7 +16,17 @@ function mspos:executeIFiscalCoreMethod( method, ... )
        return rcFail
 	end
 
-    myPrinter.msposFiscalCore( method, ... )
+    if true then
+        local res = myPrinter.msposFiscalCore( method, ... )
+        if res then
+            self.lastErrorCode = "?"
+            self.lastErrorDescription = res
+        else
+            self.lastErrorCode = 0
+            self.lastErrorDescription = ""
+        end
+        return self.lastErrorCode
+    end
 
     if true then
        return
@@ -63,6 +73,26 @@ function mspos:printEmptyCheque ( ... )
     return self:executeIFiscalCoreMethod( "printEmptyCheque" )
 end
 
+function mspos:printCheque ( ... )
+    self:log( "\n=== printCheque" )
+
+    local data = arg[1]
+
+    return self:executeIFiscalCoreMethod( "printCheque", data )
+end
+
+function mspos:printTestCheque ( ... )
+    self:log( "\n=== printTestCheque" )
+    
+    local data = {}
+    data.is_refund = arg[1] or false
+    data.phone_number = arg[2] or ""
+    data.pmt_type = 1
+    data.items = { { code=111, name="Колбаса \"Докторская\"", price=12.10, discount=2.10, amount=2.000, taxGroup=1 },
+                    { code=112, name="Морковка, кг", price=8.10, discount=1.05, amount=1.000, taxGroup=2 } }
+
+    return self:executeIFiscalCoreMethod( "printCheque", data )
+end
 
 function mspos:printNonFiscalCheque ( ... )
     self:log( "\n=== printNonFiscalCheque" )
