@@ -16,6 +16,10 @@ import android.util.Log;
 import com.ansca.corona.CoronaEnvironment;
 import com.multisoft.drivers.fiscalcore.IFiscalCore;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+
 public class MSPOSFiscalCoreBridge {
     // IFiscalCore:  http://doc.multisoft.ru/doc/MSPOS/html/
     // Namespace Reference: //  http://doc.multisoft.ru/doc/MSPOS/html/namespacecom_1_1multisoft_1_1drivers_1_1fiscalcore.html
@@ -76,23 +80,8 @@ public class MSPOSFiscalCoreBridge {
     private void checkShift() throws Exception {
         Log.i(TAG, "checkShift()");
 
-        /// <summary>
-        /// Состояние смены
-        /// </summary>
-        //public enum DayState
-        //{
-            /// <summary>
-            /// Смена закрыта
-            /// </summary>
-            // [Description("Смена закрыта")]
-        int DayStateDayClosed = 0x00;
-
-                /// <summary>
-                /// Смена открыта
-                /// </summary>
-                // [Description("Смена открыта")]
-        int DayStateDayOpen = 0x01;
-        //}
+        int DayStateDayClosed = 0x00;   // DayState (Состояние смены): Смена закрыта
+        int DayStateDayOpen = 0x01;     // DayState (Состояние смены): Смена открыта
 
         if (fiscalCore.GetDayState(callback) != DayStateDayOpen) {
             fiscalCore.OpenDay(CASHIER_NAME, callback);
@@ -103,26 +92,10 @@ public class MSPOSFiscalCoreBridge {
     private void checkDocState() throws Exception {
         Log.i(TAG, "checkDocState()");
 
-        /// <summary>
-        /// состояние чека
-        /// </summary>
-        //public enum RecState
-        //{
-            /// <summary>
-            /// открыт
-            /// </summary>
-        int RecStateOpened = 0;
+        int RecStateOpened = 0; // RecState (состояние чека): открыт
+        int RecStateTotal = 1;  // RecState (состояние чека): произведена оплата
+        int RecStateClosed = 2; // RecState (состояние чека): закрыт
 
-            /// <summary>
-            /// произведена оплата
-            /// </summary>
-        int RecStateTotal = 1;
-
-            /// <summary>
-            /// закрыт
-            /// </summary>
-        int RecStateClosed = 2;
-        //}
         int recState = fiscalCore.GetRecState(callback);
         if (recState != RecStateClosed) {
             fiscalCore.RecVoid(callback);
@@ -133,17 +106,9 @@ public class MSPOSFiscalCoreBridge {
     public void cashIn(String cash) throws Exception {
         Log.i(TAG, "cashIn(\"" + cash + "\")");
 
-        /// <summary>
-        /// наличными
-        /// </summary>
-        // [Description("НАЛИЧНЫМИ")]
-        int PayTypeCash = 0;
+        int PayTypeCash = 0;    // PayType (Типы оплат): "НАЛИЧНЫМИ"
 
-        /// <summary>
-        /// Внесение
-        /// </summary>
-        // [Description("Внесение")]
-        int RecTypePayIn = 7;
+        int RecTypePayIn = 7;   // RecType (тип открытого чека): "Внесение"
 
         checkDocState();
 
@@ -158,17 +123,9 @@ public class MSPOSFiscalCoreBridge {
     public void cashOut(String cash) throws Exception {
         Log.i(TAG, "cashOut(\"" + cash + "\")");
 
-        /// <summary>
-        /// наличными
-        /// </summary>
-        // [Description("НАЛИЧНЫМИ")]
-        int PayTypeCash = 0;
+        int PayTypeCash = 0;    // PayType (Типы оплат): "НАЛИЧНЫМИ"
 
-        /// <summary>
-        /// Изъятие
-        /// </summary>
-        // [Description("Изъятие")]
-        int RecTypePayOut = 8;
+        int RecTypePayOut = 8;  // RecType (тип открытого чека): "Изъятие"
 
         checkDocState();
 
@@ -222,11 +179,7 @@ public class MSPOSFiscalCoreBridge {
     public void printEmptyCheque() throws Exception {
         Log.i(TAG, "printEmptyCheque()");
 
-        /// <summary>
-        /// наличными
-        /// </summary>
-        // [Description("НАЛИЧНЫМИ")]
-        int PayTypeCash = 0;
+        int PayTypeCash = 0;    // PayType (Типы оплат): "НАЛИЧНЫМИ"
 
         checkDocState();
 
@@ -262,14 +215,45 @@ public class MSPOSFiscalCoreBridge {
         callback.Complete();
     }
 
-    public void printCheque(com.naef.jnlua.LuaState luaState) throws Exception {
+    public void printCheque(Map<String, Object> data) throws Exception {
         Log.i(TAG, "printCheque(data)");
 
-        luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
+        Boolean isReturn = (Boolean) data.get("is_refund");
+        String address = (String) data.get("phone_number");
 
-        checkDocState();
-        callback.Complete();
+        int recType = 0;
+        if (((Double) data.get("pmt_type")).intValue() == 1) recType = 1;
 
+        System.out.printf("\n");
+        HashMap<String, Object> items = (HashMap) data.get("items");
+        for (Map.Entry<String, Object> row: items.entrySet()) {
+            System.out.printf("==================== item no: " + row.getKey() + "\n");
+            HashMap<String, Object> item = (HashMap) row.getValue();
+            for (Map.Entry<String, Object> pair: item.entrySet()) {
+                System.out.printf("========== item key: " + pair.getKey() + ", value: " +  pair.getValue() + "\n");
+            }
+        }
+
+        // RecType { RecType.Sell = 1, RecType.SellRefund = 3, RecType.Buy = 2, RecType.BuyRefund = 4,
+        //            RecType.CorrectionRec = 19, RecType.PayIn = 7, RecType.PayOut = 8, RecType.Unfiscal = 9 }
+        // PayType { PayType.Cash = 0, PayType.Card, PayType.Bank, PayType.Voucher, PayType.Tare }
+
+//        checkDocState();
+//
+//        fiscalCore.OpenRec((isReturn) ? 3 : 1, callback);
+//        //fiscalCore.PrintRecItem("1", cash, "НАЛИЧНЫМИ:", "", callback);
+//        HashMap<String, Object> goods = (HashMap) data.get("items");
+//        for (Map.Entry<String, Object> row: items.entrySet()) {
+//            System.out.printf("===================== item no: " + row.getKey() + "\n");
+//            HashMap<String, Object> item = (HashMap) row.getValue();
+//            if (item != null) {
+//
+//            }
+//        }
+//        //fiscalCore.PrintRecTotal(callback);
+//        //fiscalCore.PrintRecItemPay(PayTypeCash, cash, "НАЛИЧНЫМИ:", callback);
+//        fiscalCore.CloseRec(callback);
+//        callback.Complete();
     }
 
 
