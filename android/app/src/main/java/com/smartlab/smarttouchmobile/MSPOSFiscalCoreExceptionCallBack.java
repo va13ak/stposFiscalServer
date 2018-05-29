@@ -20,12 +20,18 @@ public class MSPOSFiscalCoreExceptionCallBack extends IExceptionCallback.Stub {
 
         @Override
         public void HandleException ( int errCode, String message,int extErrCode, String stackTrace) {
-            msg = message;
-            err = errCode;
-            exterr = extErrCode;
-            trace = stackTrace;
+            if (err == Uninitialized) {
+                msg = message;
+                err = errCode;
+                exterr = extErrCode;
+                trace = stackTrace;
+            }
 
-            Log.e(TAG, String.format("(%n) %s (%s)/n%s", errCode, message, extErrCode, stackTrace));
+            Log.e(TAG, String.format("iFiscalCore error:\n" +
+                    "   code: %d\n" +
+                    "   msg: %s\n" +
+                    "   ext. code: %d\n" +
+                    "   stacktrace: %s", errCode, message, extErrCode, stackTrace));
         }
 
         public void Complete () throws Exception {

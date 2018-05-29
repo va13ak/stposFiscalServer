@@ -17,6 +17,7 @@ import com.ansca.corona.CoronaEnvironment;
 import com.multisoft.drivers.fiscalcore.IFiscalCore;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public class MSPOSFiscalCoreBridge {
@@ -230,8 +231,6 @@ public class MSPOSFiscalCoreBridge {
             payTypeName = "ЭЛЕКТРОННЫМИ:";
         }
 
-        String cash = "0.00";
-
         // RecType { RecType.Sell = 1, RecType.SellRefund = 3, RecType.Buy = 2, RecType.BuyRefund = 4,
         //            RecType.CorrectionRec = 19, RecType.PayIn = 7, RecType.PayOut = 8, RecType.Unfiscal = 9 }
         // PayType { PayType.Cash = 0, PayType.Card, PayType.Bank, PayType.Voucher, PayType.Tare }
@@ -249,18 +248,21 @@ public class MSPOSFiscalCoreBridge {
                 System.out.printf("========== item key: " + pair.getKey() + ", value: " +  pair.getValue() + "\n");
             }
             if (item != null) {
-                fiscalCore.SetItemTaxes((Integer) item.get("taxGroup"), callback);
+                fiscalCore.SetItemTaxes(((Double) item.get("taxGroup")).intValue(), callback);
                 fiscalCore.SetShowTaxes(true, callback);    // включить отрисовку налога
 
                 Double amount = (Double) item.get("amount");
-                if (amount == null) amount = .000;
-                String count = String.format("%.3f", amount);
+                if (amount == null) amount = 1.000;
+                String count = String.format(Locale.ROOT, "%.3f", amount);
 
                 Double discount = (Double) item.get("discount");
                 if (discount == null) discount = .00;
-                Double sum = (Double) item.get("price");
-                if (sum == null) sum = .00;
-                String total = String.format("%.2f", (sum - discount));
+                Double price = (Double) item.get("price");
+                if (price == null) price = .00;
+                // realized that total not total but price for unit, so
+                Double sum = (price * amount - discount) / amount;
+                String total = String.format(Locale.ROOT, "%.2f", sum);
+
 
                 Object art = item.get("code");
                 String article;
@@ -277,13 +279,14 @@ public class MSPOSFiscalCoreBridge {
                 if (itemName == null) itemName = "";
 
                 fiscalCore.PrintRecItem(count, total, itemName, article, callback);
+                System.out.printf("======= fiscalCore.PrintRecItem(\"%s\", \"%s\", \"%s\", \"%s\", callback);", count, total, itemName, article);
             }
         }
         fiscalCore.PrintRecTotal(callback);
         if (address != null && !address.isEmpty()) {
             fiscalCore.SendClientAddress(address, callback);
         }
-        fiscalCore.PrintRecItemPay(payType, cash, payTypeName, callback);
+        fiscalCore.PrintRecItemPay(payType, fiscalCore.GetRecTotal(callback), payTypeName, callback);
         fiscalCore.CloseRec(callback);
         callback.Complete();
     }

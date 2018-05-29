@@ -188,7 +188,8 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
             ex.printStackTrace();
             System.out.println(ex.toString());
 
-            luaState.pushString(ex.toString()); // return error message
+            //luaState.pushString(ex.toString()); // return error message
+            luaState.pushString(ex.getLocalizedMessage()); // return error message
 
         }
 
