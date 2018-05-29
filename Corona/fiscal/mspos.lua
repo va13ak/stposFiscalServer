@@ -16,39 +16,16 @@ function mspos:executeIFiscalCoreMethod( method, ... )
        return rcFail
 	end
 
-    if true then
-        local res = myPrinter.msposFiscalCore( method, ... )
-        if res then
-            self.lastErrorCode = "?"
-            self.lastErrorDescription = res
-        else
-            self.lastErrorCode = 0
-            self.lastErrorDescription = ""
-        end
-        return self.lastErrorCode
+    local res = myPrinter.msposFiscalCore( method, ... )
+    if res then
+        self.lastErrorCode = "?"
+        self.lastErrorDescription = res
+    else
+        self.lastErrorCode = 0
+        self.lastErrorDescription = ""
     end
-
-    if true then
-       return
-    end
-
-	if not myPrinter.msposFiscalCore then
-       return rcFail
-    end
-
-    local res, err = pcall( myPrinter.msposFiscalCore, ... )
-	if ( res ) then
-		return res
-
-	else
-		return rcFail, err
-	end
+    return self.lastErrorCode
 end
-
-function callbackfunc( tbl )
-    -- body
-end
-
 
 function mspos:cashIn( sum )
     local strSum = string.format("%.2f", sum)
@@ -88,7 +65,8 @@ function mspos:printTestCheque ( ... )
     data.is_refund = arg[1] or false
     data.phone_number = arg[2] or ""
     data.pmt_type = 1
-    data.items = { { code=111, name="Колбаса \"Докторская\"", price=12.10, discount=2.10, amount=2.000, taxGroup=1 },
+    data.items = { { code=110, name="Икра \"Заморская баклажанная\", кг", price=31.05, discount=2.10, amount=2.009, taxGroup=0 },
+                    { code=111, name="Колбаса \"Докторская\"", price=12.10, discount=2.10, amount=2.000, taxGroup=1 },
                     { code=112, name="Морковка, кг", price=8.10, discount=1.05, amount=1.000, taxGroup=2 } }
 
     return self:executeIFiscalCoreMethod( "printCheque", data )
