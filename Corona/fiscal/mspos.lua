@@ -40,7 +40,7 @@ function mspos:cashOut( sum )
 
     self:log( "\n=== cashOut:", strSum );
 
-    return self:executeIFiscalCoreMethod( "cashOut", string.format("%02d", strSum) )
+    return self:executeIFiscalCoreMethod( "cashOut", strSum )
 end
 
 
@@ -55,21 +55,44 @@ function mspos:printCheque ( ... )
 
     local data = arg[1]
 
-    return self:executeIFiscalCoreMethod( "printCheque", data )
+    local dataOut = { 
+        phone_number = data.phone_number or "",
+        is_refund = (arg[2] == true) and "1" or "0",
+        pmt_type = (data.pmt_type == 1) and "1" or "0",
+        items = { }
+    }
+
+    for k,v in pairs(data.items) do
+        table.insert(dataOut.items, {
+                price = string.format("%.2f", ((1. * (v.amount or 1.) * (v.price or 0.) - (v.discount or 0.)) / (v.amount or 1.))),
+                amount = string.format("%.3f", v.amount or 1.000),
+                taxGroup = string.format("%d", v.taxGroup or 0),
+                code = v.code and string.format("%d", v.code) or "",
+                name = v.name or ""
+            } )
+    end
+
+    self:log(dataOut)
+    self:log(dataOut.items)
+    for k,v in pairs(dataOut.items) do
+        self:log(v)
+    end
+
+    return self:executeIFiscalCoreMethod( "printCheque", dataOut )
 end
 
 function mspos:printTestCheque ( ... )
     self:log( "\n=== printTestCheque" )
     
     local data = {}
-    data.is_refund = arg[1] or false
-    data.phone_number = arg[2] or ""
+    data.phone_number = arg[2]
     data.pmt_type = 1
     data.items = { { code=110, name="Икра \"Заморская баклажанная\", кг", price=31.05, discount=2.10, amount=2.009, taxGroup=0 },
                     { code=111, name="Колбаса \"Докторская\"", price=12.10, discount=2.10, amount=2.000, taxGroup=1 },
                     { code=112, name="Морковка, кг", price=8.10, discount=1.05, amount=1.000, taxGroup=2 } }
 
-    return self:executeIFiscalCoreMethod( "printCheque", data )
+    return self:printCheque( data, arg[1] or false );
+    --return self:executeIFiscalCoreMethod( "printCheque", data )
 end
 
 function mspos:printNonFiscalCheque ( ... )
