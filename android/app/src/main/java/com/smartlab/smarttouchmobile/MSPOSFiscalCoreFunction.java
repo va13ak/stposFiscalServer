@@ -28,77 +28,78 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
     }
 
     public HashMap<String, Object> extractData(com.naef.jnlua.LuaState luaState, int luaTableStackIndex) {
-        HashMap<String, Object> data = new HashMap<>();
+        //HashMap<String, Object> data = new HashMap<>();
+        HashMap<String, Object> data = new HashMap();
 
-        try {
-            // Print all of the key/value paris in the Lua table.
-            System.out.printf("printTable(%d)\n", luaTableStackIndex);
-            System.out.println("{");
-            for (luaState.pushNil(); luaState.next(luaTableStackIndex); luaState.pop(1)) {
-                // Fetch the table entry's string key.
-                // An index of -2 accesses the key that was pushed into the Lua stack by luaState.next() up above.
-                String keyName = null;
-                com.naef.jnlua.LuaType luaType = luaState.type(-2);
-                switch (luaType) {
-                    case STRING:
-                        // Fetch the table entry's string key.
-                        keyName = luaState.toString(-2);
-                        break;
-                    case NUMBER:
-                        // The key will be a number if the given Lua table is really an array.
-                        // In this case, the key is an array index. Do not call luaState.toString() on the
-                        // numeric key or else Lua will convert the key to a string from within the Lua table.
-                        keyName = Integer.toString(luaState.toInteger(-2));
-                        break;
-                }
-                if (keyName == null) {
-                    // A valid key was not found. Skip this table entry.
-                    continue;
-                }
-
-                // Fetch the table entry's value in string form.
-                // An index of -1 accesses the entry's value that was pushed into the Lua stack by luaState.next() above.
-                String valueString;
-                Object value;
-                luaType = luaState.type(-1);
-                switch (luaType) {
-                    case STRING:
-                        value = luaState.toString(-1);
-                        valueString = (String) value;
-                        break;
-                    case BOOLEAN:
-                        value = luaState.toBoolean(-1);
-                        valueString = Boolean.toString((Boolean) value);
-                        break;
-                    case NUMBER:
-                        value = luaState.toNumber(-1);
-                        valueString = Double.toString((Double) value);
-                        break;
-                    case TABLE:
-                        value = extractData(luaState, -2);
-                        valueString = luaType.displayText();
-                        break;
-                    default:
-                        value = null;
-                        valueString = luaType.displayText();
-                        break;
-                }
-
-                if (valueString == null) {
-                    valueString = "";
-                }
-
-                // Print the table entry to the Android logging system.
-                System.out.println("   [" + keyName + "] = " + valueString);
-
-                data.put(keyName, value);
+        // Print all of the key/value paris in the Lua table.
+        System.out.printf("printTable(%d)\n", luaTableStackIndex);
+        System.out.println("{");
+        for (luaState.pushNil(); luaState.next(luaTableStackIndex); luaState.pop(1)) {
+            // Fetch the table entry's string key.
+            // An index of -2 accesses the key that was pushed into the Lua stack by luaState.next() up above.
+            String keyName = null;
+            com.naef.jnlua.LuaType luaType = luaState.type(-2);
+            switch (luaType) {
+                case STRING:
+                    // Fetch the table entry's string key.
+                    keyName = luaState.toString(-2);
+                    break;
+                case NUMBER:
+                    // The key will be a number if the given Lua table is really an array.
+                    // In this case, the key is an array index. Do not call luaState.toString() on the
+                    // numeric key or else Lua will convert the key to a string from within the Lua table.
+                    keyName = Integer.toString(luaState.toInteger(-2));
+                    break;
             }
-            System.out.println("}");
+            if (keyName == null) {
+                // A valid key was not found. Skip this table entry.
+                continue;
+            }
+
+            // Fetch the table entry's value in string form.
+            // An index of -1 accesses the entry's value that was pushed into the Lua stack by luaState.next() above.
+            String valueString;
+            Object value;
+            String valueType;
+            luaType = luaState.type(-1);
+            switch (luaType) {
+                case STRING:
+                    value = luaState.toString(-1);
+                    valueString = (String) value;
+                    valueType = "STRING";
+                    break;
+                case BOOLEAN:
+                    value = luaState.toBoolean(-1);
+                    valueString = Boolean.toString((Boolean) value);
+                    valueType = "BOOLEAN";
+                    break;
+                case NUMBER:
+                    value = luaState.toNumber(-1);
+                    valueString = Double.toString((Double) value);
+                    valueType = "NUMBER";
+                    break;
+                case TABLE:
+                    value = extractData(luaState, -2);
+                    valueString = luaType.displayText();
+                    valueType = "TABLE";
+                    break;
+                default:
+                    value = null;
+                    valueString = luaType.displayText();
+                    valueType = luaType.displayText();
+                    break;
+            }
+
+            if (valueString == null) {
+                valueString = "";
+            }
+
+            // Print the table entry to the Android logging system.
+            System.out.println("   [" + keyName + "] = " + valueString + "   /   " + valueType);
+
+            data.put(keyName, value);
         }
-        catch (Exception ex) {
-            // An exception will occur if given an invalid argument or no argument. Print the error.
-            ex.printStackTrace();
-        }
+        System.out.println("}");
 
         return data;
     }
@@ -119,6 +120,7 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
             String funcName = luaState.checkString(1);
             Log.i(TAG, "funcName: \"" + funcName + "\"");
             System.out.println("funcName: \"" + funcName + "\"");
+            /*
             switch (funcName) {
                 case "init":
                     msposFiscalCoreBridge.initialize();
@@ -160,6 +162,21 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
                     msposFiscalCoreBridge.cashOut(luaState.checkString(2));
                     break;
             }
+            */
+            if (funcName.equals("init")) msposFiscalCoreBridge.initialize();
+            else if (funcName.equals("shutdown")) msposFiscalCoreBridge.deInitialize();
+            else if (funcName.equals("printXReport")) msposFiscalCoreBridge.printXReport();
+            else if (funcName.equals("printZReport")) msposFiscalCoreBridge.printZReport();
+            else if (funcName.equals("printCheque")) {
+                // Check if the Lua function's first argument is a Lua table.
+                // Will throw an exception if it is not a table or if no argument was given.
+                luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
+                msposFiscalCoreBridge.printCheque(extractData(luaState, 2));
+            } else if (funcName.equals("cancelCheque")) msposFiscalCoreBridge.cancelCheque();
+            else if (funcName.equals("printEmptyCheque")) msposFiscalCoreBridge.printEmptyCheque();
+            else if (funcName.equals("printNonFiscalCheque")) msposFiscalCoreBridge.printNonFiscalCheque(luaState.checkString(2));
+            else if (funcName.equals("cashIn")) msposFiscalCoreBridge.cashIn(luaState.checkString(2));
+            else if (funcName.equals("cashOut")) msposFiscalCoreBridge.cashOut(luaState.checkString(2));
 
 //            // Check if the first argument is a function.
 //            // Will throw an exception if not or if no argument is given.

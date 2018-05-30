@@ -28,13 +28,13 @@ public class MSPOSFiscalCoreBridge {
 
     private static final String TAG = "smarttouchpos";
 
-    final static String REMOTE_SERVICE_ACTION_NAME = "com.multisoft.drivers.fiscalcore.IFiscalCore";
-    final static String REMOTE_SERVICE_PACKAGE_NAME = "com.multisoft.drivers.fiscalcore";
-    final static String REMOTE_SERVICE_COMPONENT_NAME = "com.multisoft.fiscalcore";
+    private static final String REMOTE_SERVICE_ACTION_NAME = "com.multisoft.drivers.fiscalcore.IFiscalCore";
+    private static final String REMOTE_SERVICE_PACKAGE_NAME = "com.multisoft.drivers.fiscalcore";
+    private static final String REMOTE_SERVICE_COMPONENT_NAME = "com.multisoft.fiscalcore";
 
     final static String CASHIER_NAME = "Кассир";
 
-    static IFiscalCore fiscalCore;
+    private static IFiscalCore fiscalCore;
     MSPOSFiscalCoreExceptionCallBack callback = new MSPOSFiscalCoreExceptionCallBack();
 
     private ServiceConnection serviceConnection = new ServiceConnection() {
@@ -222,11 +222,13 @@ public class MSPOSFiscalCoreBridge {
 
         String address = (String) data.get("phone_number");
 
-        int recType = (((Boolean) data.get("is_refund")) == true) ? 3 : 1;
+        String isReturn = (String) data.get("is_refund");
+        int recType = (isReturn.equals("1")) ? 3 : 1;
 
+        String pmt_type = (String) data.get("pmt_type");
         int payType = 0;
         String payTypeName = "НАЛИЧНЫМИ:";
-        if (((Double) data.get("pmt_type")).intValue() == 1) {
+        if (pmt_type.equals("1")) {
             payType = 1;
             payTypeName = "ЭЛЕКТРОННЫМИ:";
         }
@@ -248,35 +250,13 @@ public class MSPOSFiscalCoreBridge {
                 System.out.printf("========== item key: " + pair.getKey() + ", value: " +  pair.getValue() + "\n");
             }
             if (item != null) {
-                fiscalCore.SetItemTaxes(((Double) item.get("taxGroup")).intValue(), callback);
+                fiscalCore.SetItemTaxes(Integer.parseInt((String) item.get("taxGroup")), callback);
                 fiscalCore.SetShowTaxes(true, callback);    // включить отрисовку налога
 
-                Double amount = (Double) item.get("amount");
-                if (amount == null) amount = 1.000;
-                String count = String.format(Locale.ROOT, "%.3f", amount);
-
-                Double discount = (Double) item.get("discount");
-                if (discount == null) discount = .00;
-                Double price = (Double) item.get("price");
-                if (price == null) price = .00;
-                // realized that total not total but price for unit, so
-                Double sum = (price * amount - discount) / amount;
-                String total = String.format(Locale.ROOT, "%.2f", sum);
-
-
-                Object art = item.get("code");
-                String article;
-                if (art instanceof String)
-                    article = (String) art;
-                else if (art instanceof Double)
-                    article = String.format("%d", ((Double) art).intValue());
-                else if (art instanceof Integer)
-                    article = String.format("%d", (Integer) art);
-                else
-                    article = "";
-
+                String total = (String) item.get("price");
+                String article = (String) item.get("code");
+                String count = (String) item.get("amount");
                 String itemName = (String) item.get("name");
-                if (itemName == null) itemName = "";
 
                 fiscalCore.PrintRecItem(count, total, itemName, article, callback);
                 System.out.printf("======= fiscalCore.PrintRecItem(\"%s\", \"%s\", \"%s\", \"%s\", callback);", count, total, itemName, article);
@@ -290,6 +270,5 @@ public class MSPOSFiscalCoreBridge {
         fiscalCore.CloseRec(callback);
         callback.Complete();
     }
-
 
 }
