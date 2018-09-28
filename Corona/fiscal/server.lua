@@ -3,6 +3,7 @@
 -- @date 2017-01-12 00:35:05
 
 fiscalServer = { 
+	debugMode = nil,	-- nil / true
 	eventListenerAdded = false,
 	lang_code,
 	device,
@@ -18,18 +19,28 @@ fiscalServer = {
 				},
 	devPrinterTypes = {
 					[10]=5,
+					[11]=10,
 				},
 	defId = "mainDevice"
 }
 
 function fiscalServer:checkError( ... )
 	local result = nil
+	self:log( "self.device:", self.device )
 	if ( self.device ) then
+		self:log( "self.device.lastErrorCode:", self.device.lastErrorCode )
 		if ( self.device.lastErrorCode == 0 ) then
 			result = true
 
 		else
-			local strError = "Ошибка печати на фискальный регистратор ("..self.device.devId.."): (" .. ( self.device.lastErrorCode or "nil" ) .. ") " .. ( self.device.lastErrorDescription or " ошибка подключения" )
+			local strErrorCode = ""
+			if ( self.device.lastErrorCode ) then
+				if ( self.device.lastErrorCode == "?" ) then
+				else
+					strErrorCode = "(" .. self.device.lastErrorCode .. ") "
+				end
+			end
+			local strError = "Ошибка печати на фискальный регистратор (" .. self.device.devId .. "): " .. strErrorCode .. ( self.device.lastErrorDescription or " ошибка подключения" )
 			self:log( "error:", strError )
 
 			if ( self.ldb ) then
@@ -52,16 +63,29 @@ function fiscalServer:checkError( ... )
 	return result
 end
 
+local function pack2( ... ) return { n = select( '#', ... ), ... } end
+local function unpack2( t ) return unpack( t, 1, t.n ) end
+
 function fiscalServer:executeDirect( f, ... )
 	local result = nil
+	local results = pack2( result )
 	if ( self.device ) then
 
 		self.device.lastSessionLog = {}
 
-		local res, err = pcall ( f, self.device, ... )
+		--local res, err = pcall( f, self.device, ... )
+		local ress = pack2( pcall( f, self.device, ... ) )
+		self:log( "EXECUTION RESULT:", ress )
+
+		local res = ress[1]
 		if ( res ) then
 			result = self:checkError()
+
+			results = ress
+			results[1] = result
+
 		else
+			local err = ress[2]
 			local strError = "Ошибка выполнения при печати на фискальный регистратор ("..self.device.devId..") (сообщите пожалуйста разработчику):\n" .. err .. "\n" .. debug.traceback( )
 			self:log( "ERROR:", strError )
 			
@@ -101,11 +125,9 @@ function fiscalServer:executeDirect( f, ... )
 		onEndPrint = nil
 	end
 
-	return result
+	--return result
+	return unpack2( results )
 end
-
-local function pack2( ... ) return { n = select( '#', ... ), ... } end
-local function unpack2( t ) return unpack( t, 1, t.n ) end
 
 function fiscalServer:getOnEndPrint( ... )
 	local onEndPrint
@@ -122,22 +144,26 @@ end
 
 function fiscalServer:execute( ... )
 	local result = nil
+	local results = pack2( result )
 	local onEndPrint = self:getOnEndPrint( ... )
 	if onEndPrint then
-		self:log( "---!!!========", "onEndPrintStart", onEndPrint)
+		self:log( "---!!!========", "onEndPrintStart", onEndPrint )
 		local execDirectParams = pack2( ... )
 		local execDirect = function () return self:executeDirect( unpack2( execDirectParams ) ) end
-		self:log( "---!!!========", "Spinner", Spinner)
+		self:log( "---!!!========", "Spinner", Spinner )
 		if Spinner then
 			Spinner:start()
-			self:log( "---!!!========", "SpinnerStarted", Spinner)
+			self:log( "---!!!========", "SpinnerStarted", Spinner )
 		end
 		timer.performWithDelay( 100, execDirect, 1 )
 		result = true
+		results = pack2( result )
 	else
-		result = self:executeDirect( ... )
+		-- result = self:executeDirect( ... )
+		results = pack2( self:executeDirect( ... ) )
 	end
-	return result
+	-- return result
+	return unpack2( results )
 end
 
 function fiscalServer:log( ... )
@@ -177,9 +203,9 @@ function fiscalServer:log( ... )
 		elseif ( self.device ) then
 			if ( self.device.lastSessionLog ) then
 				table.insert( self.device.lastSessionLog, { time=currTime, message=("fiscalServer: "..stringForPrint) } )
-			end;
-		end;
-	end;
+			end
+		end
+	end
 
 	stringForPrint = "" .. os.date( "%H:%M:%S", currTime ) .. ": " .. stringForPrint
 
@@ -209,7 +235,7 @@ end
 
 
 function fiscalServer:genDeviceId( ... )
-	local devId = "" .. ( arg[1] or "" ) .. "/" .. ( arg[2] or "0" )
+	local devId = "" .. (arg[3] or "0") .. "/" .. ( arg[1] or "" ) .. "/" .. ( arg[2] or "0" )
 	--[[
 	for i, v in ipairs( arg ) do
 
@@ -224,11 +250,11 @@ function fiscalServer:getDeviceId( ... )
 	if arg[1] then
 		if arg[1].prn_id then
 			local prnData = arg[1]
-			devId = self:genDeviceId( prnData.prn_ipAddress, prnData.prn_port )
+			devId = self:genDeviceId( prnData.prn_ipAddress, prnData.prn_port, self.devPrinterTypes[ prnData.prnt_type ] )
 
 		elseif arg[1].fsct_type then
 			local userProfile = arg[1]
-			devId = self:genDeviceId( userProfile.pos_fsc_ipaddress, userProfile.pos_fsc_port )
+			devId = self:genDeviceId( userProfile.pos_fsc_ipaddress, userProfile.pos_fsc_port, userProfile.fsct_type )
 		end
 	end
 	return devId
@@ -310,9 +336,11 @@ function fiscalServer:init( ... )
 
 		self:log( "parameters: "..moduleName, ip, port, fsct_type )
 
-		local devId = self:genDeviceId( ip, port )
+		local devId = self:genDeviceId( ip, port, fsct_type )
 
 		device.devId = devId
+		device.debugMode = self.debugMode
+		device.fiscalServer = self
 
 		self.devices[ devId ] = device
 
@@ -410,6 +438,11 @@ function fiscalServer:printTestCheque( ... )
 end
 
 
+function fiscalServer:printCorrectionCheque ( ... )
+	return self:execute( self.device.printCorrectionCheque, ... )
+end
+
+
 function fiscalServer:cancelCheque( ... )
 	return self:execute( self.device.cancelCheque, ... )
 end
@@ -430,6 +463,12 @@ end
 function fiscalServer:printString( ... )
 	return self:execute( self.device.printNonFiscalCheque, ... )
 end
+
+
+function fiscalServer:getTaxationList( ... )
+	return self:execute( self.device.getTaxationList, ... )
+end
+
 
 function fiscalServer:isConnected( ... )
 	return self:execute( self.device.isConnected, ... )
