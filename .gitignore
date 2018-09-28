@@ -1,3 +1,4 @@
+/Corona/sensitive.lua
 /Corona/.git/
 /Corona/fiscal/atol*
 /Corona/fiscal/krypton*
@@ -6,4 +7,3 @@
 /ios/
 /mac/
 Readme.markdown
-/Corona/main.lua
