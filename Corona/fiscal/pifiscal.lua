@@ -770,15 +770,15 @@ end
 function piFiscal:printTestCheque( ... )
     self:log( "\n=== printTestCheque" );
     
-    local isReturn = arg[1] or false;
-
+    local isReturn = arg[1] or false
+    local payType = arg[2] or 0  --pmt_type: 0 - cash, 1 - card
     local res = resOK;
 
     if ( res == resOK ) then
         res = self:openCheque( isReturn and 1 or 0 );
         if ( res == resOK ) then
             --res = self:registerItem( { name="Тест5678901234567890123456789012345678901234567890", price=0.01, amount=1, discount=-0.01, taxGroup=0 } );
-            res = self:registerItem( { code=12343, name="Вафлi Артек 200гр", price=11.8, amount=1, discount=1.50, taxGroup=4 } );
+            res = self:registerItem( { code=12343, name="Вафлi Артек 200гр", price=11.8, amount=2, discount=1.50, taxGroup=4 } );
             if ( res == resOK ) then
                 --res = self:registerItem( { name="Оболонь Темное 0.5", price=14.50, discount=1.10, amount=1, taxGroup=25 } );
             end;
@@ -787,7 +787,7 @@ function piFiscal:printTestCheque( ... )
             end;
 
             if ( res == resOK ) then
-                res = self:closeCheque( 1 );
+                res = self:closeCheque( payType );
             end;
 
             if ( res ~= resOK ) then
