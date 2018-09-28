@@ -25,7 +25,7 @@ local iFiscal = {
     ioTimeout = 1,
 
 	lastErrorCode = 0,
-	lastErrorDescription = {},
+	lastErrorDescription = "",
 
     byteRepresentation = {
         [ENQ] = "ENQ",
@@ -47,172 +47,185 @@ function iFiscal:new( ... )
 	-- set up newObj
 	self.__index = self
 	return setmetatable(newObj, self)
---	newObject = { host=arg[1], port=arg[2] };
---	self.__index = self;
---	setmetatable( newObject, self );
---	newObject:init( ... );
---	return newObject;
+--	newObject = { host=arg[1], port=arg[2] }
+--	self.__index = self
+--	setmetatable( newObject, self )
+--	newObject:init( ... )
+--	return newObject
 end
 
 
 
 function iFiscal:log( ... )
-    print( ... );
+    print( ... )
 end
 
 
 
 function iFiscal:printXReport ( ... )
-	return 0;
+	return 0
 end
 
 function iFiscal:printZReport ( ... )
-	return 0;
+	return 0
 end
 
 function iFiscal:printPeriodicalReportByDate( ... )
-    return 0;
+    return 0
 end
 
 function iFiscal:printPeriodicalReportByNo( ... )
-    return 0;
+    return 0
 end
 
 function iFiscal:printArtsReport( ... )
-    return 0;
+    return 0
 end
 
 
 
 function iFiscal:cashIn ( ... )
-	return 0;
+	return 0
 end
 
 function iFiscal:cashOut ( ... )
-	return 0;
+	return 0
 end
 
 
 function iFiscal:printEmptyCheque ( ... )
-    return 0;
+    return 0
 end
 
 
 function iFiscal:printCheque ( ... )
-	return 0;
+	return 0
 end
 
 function iFiscal:printChequeCopy ( ... )
-    return 0;
+    return 0
 end
 
 function iFiscal:printTestCheque ( ... )
-    return 0;
+    return 0
+end
+
+
+function iFiscal:printCorrectionCheque ( ... )
+	return 0
 end
 
 
 function iFiscal:cancelCheque ( ... )
-    return 0;
+    return 0
 end
 
 
 function iFiscal:getSerial ( ... )
-    return 0;
+    return 0
 end
 
 
 function iFiscal:printInfo ( ... )
-    return 0;
+    return 0
 end
 
 function iFiscal:printNonFiscalCheque ( ... )
-    return 0;
+    return 0
 end
 
 
 function iFiscal:isConnected ( ... )
-	return false;
+	return false
 end
 
 
 function iFiscal:waitForConnection( ... )
-    return 0;
+    return 0
 end
 
 function iFiscal:disconnect( ... )
-    return 0;
+    return 0
 end
 
 function iFiscal:shutdown( ... )
-    return 0;
+    return 0
 end
 
 
+function iFiscal:prepareBillData( ... )
+    return 0
+end
+
+
+function iFiscal:getTaxationList( ... )
+    return {}
+end
 
 
 
 
 
 function iFiscal:getSymbol( byte )
-    local symbol;
+    local symbol
     if ( byte < 32 ) or ( byte > 127 ) then
-        symbol = self.byteRepresentation[byte];
+        symbol = self.byteRepresentation[byte]
         if (not symbol) then
-            symbol = "?";
-        end;
+            symbol = "?"
+        end
     else
-        symbol = string.char( byte );
-    end;
-    return symbol;
+        symbol = string.char( byte )
+    end
+    return symbol
 end
 
 function iFiscal:byteToChar( byte )
     if ( byte ) then
-        local symbol;
+        local symbol
         if ( byte < 32 ) or ( byte > 127 ) then
-            symbol = self.byteRepresentation[byte];
+            symbol = self.byteRepresentation[byte]
         else
-            symbol = string.char( byte );
-        end;
-        return ut13.stringToHexDump( string.char( byte ) )..(symbol and (" ("..symbol..")") or "");
-    end;
-    return "nil";
+            symbol = string.char( byte )
+        end
+        return ut13.stringToHexDump( string.char( byte ) )..(symbol and (" ("..symbol..")") or "")
+    end
+    return "nil"
 end
 
 function iFiscal:sendByte( byte, ... ) -- local
 	--[[
     if ( not self.client ) then
-		self:connect();
-	end;
+		self:connect()
+	end
     --]]
 
 	if ( self.client ) then
-	    local res1, res2, res3 = self.client:send( string.char( byte ) );
+	    local res1, res2, res3 = self.client:send( string.char( byte ) )
 
     	self:log( ">> "..(arg[1] and "["..arg[1].."] " or "")
         	        ..self:byteToChar( byte ).." :    "
             	    ..(res1 or "nil").." "
                 	..(res2 or "nil").." "
-	                ..(res3 or "nil") );
+	                ..(res3 or "nil") )
 
-    	return res1, res2, res3;
-	end;
-	return nil;
+    	return res1, res2, res3
+	end
+	return nil
 end
 
 function iFiscal:receiveByte( ... ) -- local
-    local res1, res2, res3 = self.client:receive( 1 );
+    local res1, res2, res3 = self.client:receive( 1 )
     if (res1) then
-        res1 = res1:byte();
-    end;
+        res1 = res1:byte()
+    end
 
     self:log( "<< "..(arg[1] and "["..arg[1].."] " or "")
                 ..self:byteToChar( res1 ).." :    "
                 ..(res1 and self:getSymbol( res1 ) or "nil").." "
                 ..(res2 or "nil").." "
-                ..(res3 or "nil") );
+                ..(res3 or "nil") )
 
-    return res1, res2, res3;
+    return res1, res2, res3
 end
 
 
