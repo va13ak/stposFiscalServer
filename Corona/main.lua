@@ -11,7 +11,8 @@ require("sensitive")
 --local userProfile = { fsct_type = 8, pos_fsc_ipaddress=sensitive.kryptonId1.."@"..sensitive.kryptonRemoteHost, pos_fsc_port=sensitive.kryptonPort }
 --local userProfile = { fsct_type = 8, pos_fsc_ipaddress=sensitive.kryptonId2.."@"..sensitive.kryptonRemoteHost, pos_fsc_port=sensitive.kryptonPort }
 --local userProfile = { fsct_type = 9, pos_fsc_ipaddress="10.10.10.144", pos_fsc_port=0 }
-local userProfile = { fsct_type = 10 }	-- mspos
+--local userProfile = { fsct_type = 10 }	-- mspos
+local userProfile = { fsct_type = 12 }	-- itgdevman
 
 local ut13 = require "fiscal.utils13"
 local btn13 = require "buttons13"
@@ -397,7 +398,7 @@ end
 if not curDev then
 	curDev = userProfile.fsct_type;
 	btn13.markButton("dt"..curDev, true);
-	btn13.getButton("port").text = string.format("%d", userProfile.pos_fsc_port or "");
+	btn13.getButton("port").text = userProfile.pos_fsc_port and string.format("%d", userProfile.pos_fsc_port) or ""
 	btn13.getButton("host").text = userProfile.pos_fsc_ipaddress or "";
 	fiscalServer:init( userProfile );
 	fiscalServer:setDevice(userProfile)	-- 20180413

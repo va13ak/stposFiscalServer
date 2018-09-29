@@ -16,10 +16,12 @@ fiscalServer = {
 					[8]="krypton",
 					[9]="pifiscal",
 					[10]="mspos",
+					[12]="itgdevman",
 				},
 	devPrinterTypes = {
 					[10]=5,
 					[11]=10,
+					[12]=12,
 				},
 	defId = "mainDevice"
 }

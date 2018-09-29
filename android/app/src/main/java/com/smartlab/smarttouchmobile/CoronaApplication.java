@@ -39,7 +39,8 @@ public class CoronaApplication extends android.app.Application {
 
 			// Add a module named "myPrinter" to Lua having the following functions.
 			luaFunctions = new com.naef.jnlua.NamedJavaFunction[] {
-					new MSPOSFiscalCoreFunction()
+					new MSPOSFiscalCoreFunction(),
+					new ITGDeviceManagerFunction(),
 			};
 			luaState.register("myPrinter", luaFunctions);
 			luaState.pop(1);
