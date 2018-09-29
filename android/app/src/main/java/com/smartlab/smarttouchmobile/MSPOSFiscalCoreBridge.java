@@ -239,6 +239,12 @@ public class MSPOSFiscalCoreBridge {
 
         checkDocState();
 
+        int taxation = 0;
+        String strTaxation = (String) data.get("taxation");
+        System.out.printf("===================== taxation: " + strTaxation + "\n");
+        if (strTaxation != null) taxation = Integer.parseInt(strTaxation);
+        if ( taxation != 0) fiscalCore.SetTaxationUsing(taxation, callback);
+
         fiscalCore.OpenRec(recType, callback);
 
         System.out.println("--->");
@@ -271,4 +277,63 @@ public class MSPOSFiscalCoreBridge {
         callback.Complete();
     }
 
+    public void printCorrectionCheque(Map<String, Object> data) throws Exception {
+        Log.i(TAG, "printCorrectionCheque(data)");
+
+        int recType = 19;
+
+        // RecType { RecType.Sell = 1, RecType.SellRefund = 3, RecType.Buy = 2, RecType.BuyRefund = 4,
+        //            RecType.CorrectionRec = 19, RecType.PayIn = 7, RecType.PayOut = 8, RecType.Unfiscal = 9 }
+
+        checkDocState();
+
+        int taxation = 0;
+        String strTaxation = (String) data.get("taxation");
+        if (strTaxation != null) taxation = Integer.parseInt(strTaxation);
+        if ( taxation != 0) {
+            fiscalCore.SetTaxationUsing(taxation, callback);
+            callback.Complete();
+        }
+
+        fiscalCore.OpenRec(recType, callback);
+        callback.Complete();
+
+        //int operation = 1;  // Sell = 1 / Buy = 2
+        int operation = Integer.parseInt((String) data.get("opType"));  // Sell = 1 / Buy = 2
+        String cash = (String) data.get("cash");
+        String emoney = (String) data.get("emoney");
+        String advance = (String) data.get("advance");
+        String credit = (String) data.get("credit");
+        String other = (String) data.get("other");
+        int taxGroup = Integer.parseInt((String) data.get("taxGroup"));
+        String docName = (String) data.get("docName");
+        String docDate = (String) data.get("docDate");
+        String docNum = (String) data.get("docNum");
+
+        // enum com.multisoft.drivers.fiscalcore.
+        // Independent = 0 / ByOrder
+        // (0) Independent / Самостоятельная
+        // (1) ByOrder / По предписанию
+        int corrType = Integer.parseInt((String) data.get("corrType"));
+
+        fiscalCore.FNMakeCorrectionRec(operation,cash,emoney,advance,credit,other,taxGroup,corrType,docName,docDate,docNum,callback);
+        callback.Complete();
+
+        fiscalCore.CloseRec(callback);
+        callback.Complete();
+    }
+
+    public String getTaxation() throws Exception {
+        Log.i(TAG, "getTaxation()");
+
+        int taxation = 0;
+
+        taxation = fiscalCore.GetTaxation(callback);
+        callback.Complete();
+
+        String strTaxation = String.valueOf(taxation);
+        System.out.println("===================== getTaxation(): " + strTaxation);
+
+        return strTaxation;
+    }
 }

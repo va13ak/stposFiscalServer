@@ -11,8 +11,6 @@ import java.util.HashMap;
 
 /**
  * Implements the msposFiscalCoreFunction() function in Lua.
- * <p>
- * Demonstrates how to fetch a "Lua function argument" and then call that Lua function.
  */
 class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
     private static final String TAG = "smarttouchpos";
@@ -115,6 +113,9 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
      */
     @Override
     public int invoke(com.naef.jnlua.LuaState luaState) {
+        String result1 = null;
+        int resCount = 0;
+
         try {
             MSPOSFiscalCoreBridge msposFiscalCoreBridge = new MSPOSFiscalCoreBridge();
             String funcName = luaState.checkString(1);
@@ -167,7 +168,12 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
             else if (funcName.equals("shutdown")) msposFiscalCoreBridge.deInitialize();
             else if (funcName.equals("printXReport")) msposFiscalCoreBridge.printXReport();
             else if (funcName.equals("printZReport")) msposFiscalCoreBridge.printZReport();
-            else if (funcName.equals("printCheque")) {
+            else if (funcName.equals("printCorrectionCheque")) {
+                // Check if the Lua function's first argument is a Lua table.
+                // Will throw an exception if it is not a table or if no argument was given.
+                luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
+                msposFiscalCoreBridge.printCorrectionCheque(extractData(luaState, 2));
+            } else if (funcName.equals("printCheque")) {
                 // Check if the Lua function's first argument is a Lua table.
                 // Will throw an exception if it is not a table or if no argument was given.
                 luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
@@ -177,6 +183,7 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
             else if (funcName.equals("printNonFiscalCheque")) msposFiscalCoreBridge.printNonFiscalCheque(luaState.checkString(2));
             else if (funcName.equals("cashIn")) msposFiscalCoreBridge.cashIn(luaState.checkString(2));
             else if (funcName.equals("cashOut")) msposFiscalCoreBridge.cashOut(luaState.checkString(2));
+            else if (funcName.equals("getTaxation")) result1 = msposFiscalCoreBridge.getTaxation();
 
 //            // Check if the first argument is a function.
 //            // Will throw an exception if not or if no argument is given.
@@ -210,7 +217,12 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
 
         }
 
+        if ( result1 != null ) {
+            luaState.pushString( result1.toString() );
+            resCount++;
+        }
+
         // Return 0 since this Lua function does not return any values.
-        return 1;   // nil or error message
+        return 1 + resCount;   // nil or error message
     }
 }
