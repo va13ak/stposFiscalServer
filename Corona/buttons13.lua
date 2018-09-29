@@ -129,7 +129,7 @@ rowButtonsNumber = 6
 colButtonIdent = 4
 rowButtonIdent = 4
 
-buttonHeight = 25
+buttonHeight = math.floor( displayContentHeight / 31 ) 
 
 topFirstButtonRow = displayContentHeight + 1
 			- ( (rowButtonsNumber - 1) * rowButtonIdent + rowButtonsNumber * buttonHeight )
