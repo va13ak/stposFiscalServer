@@ -97,7 +97,10 @@ function itgdevman:callDeviceManager( data, ... )
     local jsonData = json.prettify(reqData)
     self:log( "\n=== send data:", jsonData )
 
-    local res, ret2 = myPrinter.itgDeviceManager( jsonData, ... )
+    local callbackFunction = function ( status, ... ) self:log( "status:", status, ... ) end
+    --local res, ret2 = myPrinter.itgDeviceManager( jsonData, callbackFunction );
+    local res = myPrinter.itgDeviceManager( jsonData, callbackFunction )
+
     local errorCode
     if res then
         self.lastErrorCode = lastErrorCodeFail
@@ -108,6 +111,7 @@ function itgdevman:callDeviceManager( data, ... )
         self.lastErrorDescription = ""
         errorCode = resOK
 
+        --[[
         self:log( "\n=== get data:", ret2 )
 
         local respData = json.decode(ret2)
@@ -117,8 +121,10 @@ function itgdevman:callDeviceManager( data, ... )
             self.lastErrorDescription = respData.errortxt
             errorCode = respData.res
         end
+        ]]
     end
-    return errorCode, ret2
+    --return errorCode, ret2
+    return errorCode
 end
 
 function itgdevman:cashIn( sum )

@@ -20,10 +20,6 @@ public class ITGDeviceManagerFunction implements com.naef.jnlua.NamedJavaFunctio
     private static String INTENT_ACTION = "com.itekgold.stpos.DEVICE_MANAGER_TASK";
     private static String TEST_DATA = "{sdfsdvsd}";
 
-    private static int respRequestCode;
-    private static int respResultCode;
-    private static String respDataString;
-
     /**
      * Gets the name of the Lua function as it would appear in the Lua script.
      *
@@ -47,63 +43,140 @@ public class ITGDeviceManagerFunction implements com.naef.jnlua.NamedJavaFunctio
     public int invoke(com.naef.jnlua.LuaState luaState) {
         CoronaActivity activity = CoronaEnvironment.getCoronaActivity();
         if (activity == null) {
-            return 0;
+            luaState.pushString("CoronaEnvironment.getCoronaActivity() is null"); // return error message
+            return 1;
         }
 
-        int resCount = 0;
+        int luaStringDataStackIndex = 1;
+        int luaFunctionStackIndex = 2;
 
+        final String printData;
+
+        // Check if the first argument is string with data
+        // Will print a stack trace if not or if no argument was given.
         try {
-            String printData = luaState.checkString(1);
+            printData = luaState.checkString(luaStringDataStackIndex);
             Log.i(TAG, "printData: \"" + printData + "\"");
-
-            respDataString = null;
-            respRequestCode = 0;
-            respResultCode = 0;
-
-            int requestCode = activity.registerActivityResultHandler(new ITGDeviceManagerResponseHandler());
-
-            Intent intent = new Intent(INTENT_ACTION);
-            intent.putExtra(EXTRA_DATA, printData);
-            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            activity.startActivityForResult(intent, requestCode);
-
-            Log.i(TAG, "ACTIVITY JUST STARTED");
-            System.out.println("ACTIVITY JUST STARTED");
-
-            while (respDataString == null) {
-                System.out.println( System.currentTimeMillis() );
-                Thread.sleep(200);
-            }
-
-            Log.i(TAG, "AGAIN RESULT IS respDataDataString");
-            System.out.println("AGAIN RESULT IS respDataDataString");
-
-            luaState.pushNil(); // no errors here
-
-        } catch (Exception ex) {
-            // An exception will occur if the following happens:
-            // 1) No argument was given.
-            // 2) The argument was not a Lua function.
-            // 3) The Lua function call failed, likely because the Lua function could not be found.
+        }
+        catch (Exception ex) {
             ex.printStackTrace();
             System.out.println(ex.toString());
-
-            //luaState.pushString(ex.toString()); // return error message
             luaState.pushString(ex.getLocalizedMessage()); // return error message
-
+            return 1;   // return 1 value
         }
 
-        if ( respDataString != null ) {
-            luaState.pushString( respDataString.toString() );
-            resCount++;
+        // Check if the second argument is a function.
+        // Will print a stack trace if not or if no argument was given.
+        try {
+            luaState.checkType(luaFunctionStackIndex, com.naef.jnlua.LuaType.FUNCTION);
+        }
+        catch (Exception ex) {
+            ex.printStackTrace();
+            System.out.println(ex.toString());
+            luaState.pushString(ex.getLocalizedMessage()); // return error message
+            return 1;   // return 1 value
         }
 
-        // Return 0 since this Lua function does not return any values.
-        return 1 + resCount;   // nil or error message
+
+        // Store the given Lua function in the Lua registry to be accessed later. We must do this because
+        // the given Lua function argument will be popped off the Lua stack when we leave this Java method.
+        // Note that the ref() method expects the value to be stored is at the top of the Lua stack.
+        // So, we must first push the Lua function to the top. The ref() method will automatically pop off
+        // the push Lua function afterwards.
+        luaState.pushValue(luaFunctionStackIndex);
+        final int luaFunctionReferenceKey = luaState.ref(com.naef.jnlua.LuaState.REGISTRYINDEX);
+
+        // Set up a dispatcher which allows us to send a task to the Corona runtime thread from another thread.
+        // This way we can call the given Lua function on the same thread that Lua runs in.
+        // This dispatcher will only send tasks to the Corona runtime that owns the given Lua state object.
+        // Once the Corona runtime is disposed/destroyed, which happens when the Corona activity is destroyed,
+        // then this dispatcher will no longer be able to send tasks.
+        final com.ansca.corona.CoronaRuntimeTaskDispatcher dispatcher =
+                new com.ansca.corona.CoronaRuntimeTaskDispatcher(luaState);
+
+        // Post a Runnable object on the UI thread that will call the given Lua function.
+        com.ansca.corona.CoronaEnvironment.getCoronaActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                // *** We are now running in the main UI thread. ***
+
+
+                // Create a task that will call the given Lua function.
+                // This task's execute() method will be called on the Corona runtime thread, just before rendering a frame.
+                com.ansca.corona.CoronaRuntimeTask task = new com.ansca.corona.CoronaRuntimeTask() {
+                    @Override
+                    public void executeUsing(com.ansca.corona.CoronaRuntime runtime) {
+                        // *** We are now running on the Corona runtime thread. ***
+                        String errorMessage = null;
+                        try {
+
+                            CoronaActivity activity = CoronaEnvironment.getCoronaActivity();
+                            if (activity != null) {
+                                int requestCode = activity.registerActivityResultHandler(new ITGDeviceManagerResponseHandler(runtime, luaFunctionReferenceKey));
+
+                                Intent intent = new Intent(INTENT_ACTION);
+                                intent.putExtra(EXTRA_DATA, printData);
+                                //intent.putExtra(EXTRA_DATA, TEST_DATA);
+                                intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                                activity.startActivityForResult(intent, requestCode);
+
+                                Log.i(TAG, "ACTIVITY JUST STARTED");
+                                System.out.println("ACTIVITY JUST STARTED");
+                            }
+
+                        }
+                        catch (Exception ex) {
+                            ex.printStackTrace();
+                            errorMessage = ex.toString();
+                        }
+
+                        if (errorMessage != null) {
+                            try {
+
+                                // Fetch the Corona runtime's Lua state.
+                                com.naef.jnlua.LuaState luaState = runtime.getLuaState();
+
+                                // Fetch the Lua function stored in the registry and push it to the top of the stack.
+                                luaState.rawGet(com.naef.jnlua.LuaState.REGISTRYINDEX, luaFunctionReferenceKey);
+
+                                // Remove the Lua function from the registry.
+                                luaState.unref(com.naef.jnlua.LuaState.REGISTRYINDEX, luaFunctionReferenceKey);
+
+                                // Call the Lua function that was just pushed to the top of the stack.
+                                // The 1st argument indicates the number of arguments that we are passing to the Lua function.
+                                // The 2nd argument indicates the number of return values to accept from the Lua function.
+                                // Note: If you want to call the Lua function with arguments, then you need to push each argument
+                                //       value to the luaState object's stack.
+                                luaState.pushBoolean(false);     // operation unsuccessful
+                                luaState.pushString(errorMessage);  // error message
+                                luaState.pushNil();                 // empty third argument
+                                luaState.call(3, 0);
+                            }
+                            catch (Exception ex) {
+                                ex.printStackTrace();
+                            }
+                        }
+                    }
+                };
+
+                // Send the above task to the Corona runtime asynchronously.
+                // The send() method will do nothing if the Corona runtime is no longer available, which can
+                // happen if the runtime was disposed/destroyed after the user has exited the Corona activity.
+                dispatcher.send(task);
+            }
+        });
+
+        luaState.pushNil(); // no errors here
+        return 1;   // return 1 empty value
     }
 
     private static class ITGDeviceManagerResponseHandler implements CoronaActivity.OnActivityResultHandler {
-        public ITGDeviceManagerResponseHandler() {
+        private com.ansca.corona.CoronaRuntime runtime;
+        private int luaFunctionReferenceKey;
+
+        public ITGDeviceManagerResponseHandler(com.ansca.corona.CoronaRuntime runtime, int luaFunctionReferenceKey) {
+            this.runtime = runtime;
+            this.luaFunctionReferenceKey = luaFunctionReferenceKey;
         }
 
         @Override
@@ -117,14 +190,39 @@ public class ITGDeviceManagerFunction implements com.naef.jnlua.NamedJavaFunctio
             Log.i(TAG, "ACTIVITY JUST FINISHED");
             System.out.println("ACTIVITY JUST FINISHED");
 
-            //if (requestCode==REQUEST_CODE && resultCode== Activity.RESULT_OK && data!=null) {
-            if (resultCode == Activity.RESULT_OK && data != null) {
+            String respDataString = null;
+            if (data != null) {
                 respDataString = data.getStringExtra(EXTRA_DATA);
-                respResultCode = resultCode;
-                respRequestCode = requestCode;
+                Log.i(TAG, "RESULT (" + Integer.toString(resultCode)+ ") IS: " + respDataString);
+                System.out.println("RESULT (" + Integer.toString(resultCode)+ ") IS: " + respDataString);
+            }
 
-                Log.i(TAG, "RESULT IS: " + respDataString);
-                System.out.println("RESULT IS: " + respDataString);
+            try {
+
+                // Fetch the Corona runtime's Lua state.
+                com.naef.jnlua.LuaState luaState = runtime.getLuaState();
+
+                // Fetch the Lua function stored in the registry and push it to the top of the stack.
+                luaState.rawGet(com.naef.jnlua.LuaState.REGISTRYINDEX, luaFunctionReferenceKey);
+
+                // Remove the Lua function from the registry.
+                luaState.unref(com.naef.jnlua.LuaState.REGISTRYINDEX, luaFunctionReferenceKey);
+
+                // Call the Lua function that was just pushed to the top of the stack.
+                // The 1st argument indicates the number of arguments that we are passing to the Lua function.
+                // The 2nd argument indicates the number of return values to accept from the Lua function.
+                // Note: If you want to call the Lua function with arguments, then you need to push each argument
+                //       value to the luaState object's stack.
+                luaState.pushBoolean(true);     // operation successful
+                luaState.pushInteger(resultCode);  // result code
+                if (respDataString == null)
+                    luaState.pushNil();             // no data
+                else
+                    luaState.pushString(respDataString);
+
+                luaState.call(3, 0);
+            } catch (Exception ex) {
+                ex.printStackTrace();
             }
         }
     }
