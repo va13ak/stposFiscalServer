@@ -215,6 +215,9 @@ public class ITGDeviceManagerFunction implements com.naef.jnlua.NamedJavaFunctio
                 //       value to the luaState object's stack.
                 luaState.pushBoolean(true);     // operation successful
                 luaState.pushInteger(resultCode);  // result code
+                // result code: Activity.RESULT_OK (-1)
+                //              Activity.RESULT_CANCELED (0)
+                //              Activity.RESULT_FIRST_USER (1)
                 if (respDataString == null)
                     luaState.pushNil();             // no data
                 else

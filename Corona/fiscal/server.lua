@@ -28,27 +28,29 @@ fiscalServer = {
 
 function fiscalServer:checkError( ... )
 	local result = nil
-	self:log( "self.device:", self.device )
-	if ( self.device ) then
-		self:log( "self.device.lastErrorCode:", self.device.lastErrorCode )
-		if ( self.device.lastErrorCode == 0 ) then
+	local device = arg[1] or self.device
+
+	self:log( "self.device:", device )
+	if ( device ) then
+		self:log( "self.device.lastErrorCode:", device.lastErrorCode )
+		if ( device.lastErrorCode == 0 ) then
 			result = true
 
 		else
 			local strErrorCode = ""
-			if ( self.device.lastErrorCode ) then
-				if ( self.device.lastErrorCode == "?" ) then
+			if ( device.lastErrorCode ) then
+				if ( device.lastErrorCode == "?" ) then
 				else
-					strErrorCode = "(" .. self.device.lastErrorCode .. ") "
+					strErrorCode = "(" .. device.lastErrorCode .. ") "
 				end
 			end
-			local strError = "Ошибка печати на фискальный регистратор (" .. self.device.devId .. "): " .. strErrorCode .. ( self.device.lastErrorDescription or " ошибка подключения" )
+			local strError = "Ошибка печати на фискальный регистратор (" .. device.devId .. "): " .. strErrorCode .. ( device.lastErrorDescription or " ошибка подключения" )
 			self:log( "error:", strError )
 
 			if ( self.ldb ) then
 				curOrderId = curOrderId or "?"
-				for i = 1, #self.device.lastSessionLog do
-					local rec = self.device.lastSessionLog[ i ]
+				for i = 1, #device.lastSessionLog do
+					local rec = device.lastSessionLog[ i ]
 					self.ldb:addNewRowData( "debug_log", { message=rec.message,
 															time=os.date( '%Y-%m-%d %H:%M:%S', rec.time ) } )
 				end
@@ -71,6 +73,7 @@ local function unpack2( t ) return unpack( t, 1, t.n ) end
 function fiscalServer:executeDirect( f, ... )
 	local result = nil
 	local results = pack2( result )
+	local processStillRunning
 	if ( self.device ) then
 
 		self.device.lastSessionLog = {}
@@ -85,6 +88,10 @@ function fiscalServer:executeDirect( f, ... )
 
 			results = ress
 			results[1] = result
+
+			if ress[2] == nil then -- still executing, result will be returned into callback function
+				processStillRunning = true
+			end
 
 		else
 			local err = ress[2]
@@ -109,22 +116,18 @@ function fiscalServer:executeDirect( f, ... )
 			end
 		end
 
-		self.device.lastSessionLog = nil
+		if processStillRunning then
+		else
+			self.device.lastSessionLog = nil
 
-		self.device.lastErrorCode = 0
-		self.device.lastErrorDescription = ""
+			self.device.lastErrorCode = 0
+			self.device.lastErrorDescription = ""
+		end
 	end
 
-	local onEndPrint = self:getOnEndPrint( ... )
-	if onEndPrint then
-		self:log( "---!!!========", "onEndPrintEnd", onEndPrint)
-		self:log( "---!!!========", "Spinner", Spinner)
-		if Spinner then
-			Spinner:stop()
-			self:log( "---!!!========", "SpinnerStoped", Spinner)
-		end
-		onEndPrint( result ~= true )
-		onEndPrint = nil
+	if processStillRunning then
+	else
+		self:runOnEndPrint( self:getOnEndPrint( ... ), result )
 	end
 
 	--return result
@@ -142,6 +145,19 @@ function fiscalServer:getOnEndPrint( ... )
 		end
 	end
 	return onEndPrint
+end
+
+function fiscalServer:runOnEndPrint( onEndPrint, result )
+	if onEndPrint then
+		self:log( "---!!!========", "onEndPrintEnd", onEndPrint)
+		self:log( "---!!!========", "Spinner", Spinner)
+		if Spinner then
+			Spinner:stop()
+			self:log( "---!!!========", "SpinnerStoped", Spinner)
+		end
+		onEndPrint( result ~= true )
+		onEndPrint = nil
+	end
 end
 
 function fiscalServer:execute( ... )

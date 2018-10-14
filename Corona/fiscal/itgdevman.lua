@@ -12,43 +12,6 @@ local resFail = 0xFF
 local lastErrorCodeFail = "?"
 
 
--- Код системы налогообложения
--- Используется при регистрации и перерегистрации
-local enumTaxCode = {
-        -- Общая
-        -- [Description("ОСН")]
-        Common = 0x01,
-
-        -- Упрощённая Доход
-        -- [Description("УСН доход")]
-        Simplified = 0x02,
-
-        -- Упрощённая Доход минус Расход
-        -- [Description("УСН доход - расход")]
-        SimplifiedWithExpense = 0x04,
-
-        -- Единый налог на вмененный доход
-        -- [Description("ЕНВД")]
-        ENVD = 0x08,
-
-        -- Единый сельскохозяйственный налог
-        -- [Description("ЕСН")]
-        CommonAgricultural = 0x10,
-
-        -- Патентная система налогообложения
-        -- [Description("Патент")]
-        Patent = 0x20
-}
-
-
-local taxations = {
-    { id = 1, value = enumTaxCode.Common, name = "(1) ОСН" },
-    { id = 2, value = enumTaxCode.Simplified, name = "(2) УСН доход" },
-    { id = 3, value = enumTaxCode.SimplifiedWithExpense, name = "(3) УСН доход - расход" },
-    { id = 4, value = enumTaxCode.ENVD, name = "(4) ЕНВД" },
-    { id = 5, value = enumTaxCode.CommonAgricultural, name = "(5) ЕСН" },
-    { id = 6, value = enumTaxCode.Patent, name = "(6) Патент" }
-}
 
 local iFiscal = require "fiscal.ifiscal"
 local itgdevman = iFiscal:new()
@@ -61,8 +24,29 @@ end
 
 
 function itgdevman:callDeviceManager( data, ... )
+    self:fillCashier( data )
+
+    local reqData = {
+                        ver = 1,
+                        device = "",
+                        tag = 0,
+                        sign = ""
+                    }
+    if arg[1] then  -- non-fiscal
+        reqData.nonfiscal = data
+        reqData.type = 2    -- non-fiscal
+    else
+        reqData.fiscal = data
+        reqData.type = 1    -- fiscal
+    end
+
+
+    self:log( "\n=== send data (raw):", reqData )
+
+    local jsonData = json.prettify(reqData)
+
     if self.debugMode then
-        self:log( "debugMode:", json.prettify( data ) )
+        self:log( "debugMode:", jsonData )
         self.lastErrorCode = 0
         self.lastErrorDescription = ""
         return resOK
@@ -84,20 +68,43 @@ function itgdevman:callDeviceManager( data, ... )
        return resFail
     end
 
-    self:fillCashier( data )
-
-    local reqData = {
-                        ver = 1,
-                        device = "",
-                        tag = 0,
-                        sign = "",
-                        fiscal = data
-                    }
-
-    local jsonData = json.prettify(reqData)
     self:log( "\n=== send data:", jsonData )
 
-    local callbackFunction = function ( status, ... ) self:log( "status:", status, ... ) end
+    local callbackFunction = function ( status, ... )
+        self:log( "status:", status, ... )
+        local onEndPrint = self.fiscalServer:getOnEndPrint()
+        local result = status
+        if status then
+            local resultCode = arg[1]
+            if resultCode == -1 then
+                local respDataString = arg[2]
+                local respData = json.decode( respDataString )
+                if respData.res == 0 then -- ok
+                else
+                    self.lastErrorCode = respData.res
+                    self.lastErrorDescription = respData.errortxt
+                end
+            
+            else
+                self.lastErrorCode = lastErrorCodeFail
+                self.lastErrorDescription = "device manager activity cancelled"
+            end
+
+        else
+            self.lastErrorCode = lastErrorCodeFail
+            self.lastErrorDescription = arg[1]
+        end
+
+        local result = self.fiscalServer:checkError( self )
+
+        self.lastSessionLog = nil
+
+        self.lastErrorCode = 0
+        self.lastErrorDescription = ""
+
+        self.fiscalServer:runOnEndPrint( onEndPrint, result )
+    end
+
     --local res, ret2 = myPrinter.itgDeviceManager( jsonData, callbackFunction );
     local res = myPrinter.itgDeviceManager( jsonData, callbackFunction )
 
@@ -159,39 +166,25 @@ end
 function itgdevman:printEmptyCheque ( ... )
     self:log( "\n=== printEmptyCheque" )
 
-    return self:callDeviceManager( "printEmptyCheque" )
+    local data = {}
+    data.pmt_type = 0 --pmt_type: 0 - cash, 1 - card
+    data.items = {}
+
+    return self:printCheque( data, arg[1] or false )
 end
 
-function itgdevman:checkTaxation( taxation, flagsTaxation )
-    if ( taxation == 0 ) then
-        return true
-    end
-
-    local row = taxations[taxation]
-    if ( row ) then
-        if ( band( flagsTaxation, row.value ) == row.value ) then
-            return true
-        end
-    end
-end
 
 function itgdevman:printCheque ( ... )
     -- task = 1 / 2 - return
     self:log( "\n=== printCheque" )
 
-    local errorCode, flagsTaxation = self:getTaxation( )
-    if ( errorCode ~= resOK ) then
-        return errorCode
-    end
-
     local data = arg[1]
 
     local dataOut = { 
         phone_number = data.phone_number or "",
-        is_refund = (arg[2] == true) and "1" or "0",
+        task = (arg[2] == true) and 2 or 1,
         pmt_type = (data.pmt_type == 1) and "1" or "0",
-        taxation = "0",
-        items = { }
+        receipt = { sum = 0., rows = {}, pays = {}, hdtxt = "", btmtxt = "" }
     }
 
     local taxationById = { }
@@ -204,78 +197,37 @@ function itgdevman:printCheque ( ... )
 
     self:log( "taxationById:", taxationById )
 
-    local dataOutItemsByTaxation = { }
-    local haveEmptyTaxation
-    local haveNotEmptyTaxation
-    local haveWrongTaxation
+    local paysum = 0
 
     for k, v in pairs( data.items ) do
         local currTaxation = 0
         if ( v.fscg_id ) then
             currTaxation = taxationById[v.fscg_id];
         end
-        
-        if ( currTaxation == 0 ) then
-            haveEmptyTaxation = true
-        else
-            haveNotEmptyTaxation = true
-        end
 
-        if self:checkTaxation( currTaxation, flagsTaxation ) then
-        else
-            haveWrongTaxation = true
-        end
+        local rowValue = {
+                code = v.code or 0,
+                name = v.name or "",
+                cnt = ( v.amount or 1.000 ),
+                price = (v.price or 0.),
+                discount = (v.discount or 0.),
+                taxgrp = ( ( ( v.tax or 0 ) == 0 ) and "1" or ( v.tax - 1 ) ),  -- будем считать налоговые группы как в MSPOS-Expert от 1
+                taxation = currTaxation,
+                txt = ""
+            }
 
-        self:log( "currTaxation, fscg_id:", currTaxation, v.fscg_id)
-        if dataOutItemsByTaxation[currTaxation] then
-        else
-            dataOutItemsByTaxation[currTaxation] = { }
-        end
+        table.insert(dataOut.receipt.rows, { row = rowValue } )
 
-        table.insert(dataOutItemsByTaxation[currTaxation], {
-                price = string.format( "%.2f", ( (1. * (v.amount or 1.) * (v.price or 0.) - (v.discount or 0.) ) / (v.amount or 1.) ) ),
-                amount = string.format( "%.3f", v.amount or 1.000 ),
-                taxGroup = string.format( "%d", ( ( v.tax or 0 ) == 0 ) and "1" or ( v.tax - 1 ) ),  -- будем считать налоговые группы как в MSPOS-Expert от 1
-                code = v.code and string.format( "%d", v.code ) or "",
-                name = v.name or ""
-            } )
+        paysum = paysum + math.floor ( 0.5 + ( 1. * rowValue.cnt * rowValue.price - rowValue.discount ) )
     end
 
-    self:log( "haveEmptyTaxation:", haveEmptyTaxation )
-    self:log( "haveNotEmptyTaxation:", haveNotEmptyTaxation )
-    self:log( "haveWrongTaxation:", haveWrongTaxation )
-    self:log( "dataOutItemsByTaxation:", dataOutItemsByTaxation )
+    table.insert(dataOut.receipt.pays, { pay = {
+            type = data.pmt_type,
+            sum = paysum
+        } } )
 
-    if ( haveEmptyTaxation and haveNotEmptyTaxation ) then
-        self.lastErrorCode = lastErrorCodeFail
-        self.lastErrorDescription = "Найдены товары одновременно с явно и неявно (0) указанной системой налогообложения"
-        return resFail
-    end
 
-    if ( haveWrongTaxation ) then
-        self.lastErrorCode = lastErrorCodeFail
-        self.lastErrorDescription = "Найдены товары с незапрограммированной системой налогообложения"
-        return resFail
-    end
-
-    for k, v in pairs( dataOutItemsByTaxation ) do
-        dataOut.items = v
-        dataOut.taxation = tostring( ( k == 0 ) and 0 or taxations[k].value )
-
-        self:log( dataOut )
-        self:log( dataOut.items )
-        for k1, v1 in pairs( dataOut.items ) do
-            self:log( v1 )
-        end
-
-        errorCode = self:callDeviceManager( "printCheque", dataOut )
-
-        if ( errorCode ~= resOK ) then
-            break
-        end
-    end
-
-    return errorCode
+    return self:callDeviceManager( dataOut )
 end
 
 function itgdevman:printTestCheque ( ... )
@@ -295,112 +247,21 @@ end
 function itgdevman:printNonFiscalCheque ( ... )
     self:log( "\n=== printNonFiscalCheque" )
 
-    return self:callDeviceManager( "printNonFiscalCheque", arg[1] or "" )
-end
-
-
-function itgdevman:getTaxation( ... )
-    self:log( "\n=== getTaxation" )
-
-    local errorCode, strTaxation = self:callDeviceManager( "getTaxation" )
-    if ( errorCode ~= resOK ) then
-        return errorCode, 0
-    end
-
-    local taxation = tonumber( strTaxation )
-
-    self:log( "taxation:", taxation )
-
-    return errorCode, taxation
-end
-
-
-function itgdevman:getTaxationList( ... )
-    self:log( "\n=== getTaxationList" )
-
-    local taxationList = { }
-
-    local errorCode, taxation = self:getTaxation( ... )
-
-    if ( errorCode ~= resOK ) then
-        return taxationList
-    end
-
-    if ( band( taxation, enumTaxCode.Common ) == enumTaxCode.Common ) then 
-        table.insert( taxationList, taxations[1].name )
-    end
-    if ( band( taxation, enumTaxCode.Simplified ) == enumTaxCode.Simplified ) then 
-        table.insert( taxationList, taxations[2].name )
-    end
-    if ( band( taxation, enumTaxCode.SimplifiedWithExpense ) == enumTaxCode.SimplifiedWithExpense ) then 
-        table.insert( taxationList, taxations[3].name )
-    end
-    if ( band( taxation, enumTaxCode.ENVD ) == enumTaxCode.ENVD ) then
-        table.insert( taxationList, taxations[4].name )
-    end
-    if ( band( taxation, enumTaxCode.CommonAgricultural ) == enumTaxCode.CommonAgricultural ) then
-        table.insert( taxationList, taxations[5].name )
-    end
-    if ( band( taxation, enumTaxCode.Patent ) == enumTaxCode.Patent ) then
-        table.insert( taxationList, taxations[6].name )
-    end
-
-    self:log( "taxationList:", taxationList )
-
-    return taxationList
-end
-
-
-
-
-function itgdevman:printCorrectionCheque ( ... )
-    self:log( "\n=== printCorrectionCheque" )
-
-    local params = arg[1]
-
-    local data = {}
-    data.cash = string.format( "%.2f", params.sum_cash )
-    data.emoney = string.format( "%.2f", params.sum_electronic )
-    data.advance = string.format( "%.2f", 0 )
-    data.credit = string.format( "%.2f", 0 )
-    data.other = string.format( "%.2f", 0 )
-    data.taxGroup = string.format( "%d", (params.tax_num or 1) - 1 )
-    
-    data.opType = ( ( params.sw_income_expense == true ) or ( params.sw_income_expense == "true" ) ) and "3" or "1" -- true == expense, false == income
-    
-    data.docName = params.doc_name or ""
-    if params.doc_date then
-        data.docDate = params.doc_date.."T15:30:41.000Z"  -- "yyyy'-'MM'-'dd'T'HH':'mm':'ss'.'fff'Z'"
-    end
-    data.docNum = params.doc_num or "0"
-
-    data.corrType = "0" -- Самостоятельная
-    if ( params.type_independent == true ) or ( params.type_independent == "true" ) then
-        data.corrType = "0" -- Самостоятельная
-    elseif ( params.type_by_order == true ) or ( params.type_by_order == "true" ) then
-        data.corrType = "1" -- По предписанию
-    end
-    
-    local taxation = 0
-    for k, v in pairs( taxations ) do
-        if ( v.name == params.taxation ) then
-            taxation = v.value
-        end
-    end
-    data.taxation = tostring( taxation )
-
-    self:log( data )
-
-    return self:callDeviceManager( "printCorrectionCheque", data )
+    return self:callDeviceManager( { text = arg[1] or "" }, true )  -- non-fiscal
 end
 
 
 function itgdevman:cancelCheque()
     self:log( "\n=== cancelCheque" )
 
-    return self:callDeviceManager( "cancelCheque" )
+    return self:callDeviceManager( { task = 8 } )  -- cancels opened check
 end
 
+function iFiscal:printChequeCopy ( ... )
+    self:log( "\n=== printChequeCopy" )
+
+    return self:callDeviceManager( { task = 5 } ) -- reprints last document
+end
 
 
 function itgdevman:printXReport()
@@ -415,16 +276,6 @@ function itgdevman:printZReport()
 	self:log( "\n=== printZReport" )
 
     return self:callDeviceManager( { task = 7 } )
-end
-
-
-
-function itgdevman:init( ... )
-    --return self:callDeviceManager( "init" )
-end
-
-function itgdevman:shutdown( ... )
-    --return self:callDeviceManager( "shutdown" )
 end
 
 
