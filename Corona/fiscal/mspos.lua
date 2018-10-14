@@ -148,10 +148,16 @@ function mspos:printCheque ( ... )
         items = { }
     }
 
+    local isThereGroupsWithNonZeroTaxations
+
     local taxationById = { }
     if self.fiscalServer.ldb then
         for k, v in pairs( self.fiscalServer.ldb:getAllData("fiscal_groups") ) do
+            self:log( "fiscal groups:", v )            
             taxationById[v.fscg_id] = v.fscg_sno or 0   -- 20180710 - add
+            if taxationById[v.fscg_id] ~= 0 then -- check if there is groups with non-zero taxations
+                isThereGroupsWithNonZeroTaxations = true
+            end
         end
         self:log( "fiscal_groups:", self.fiscalServer.ldb:getAllData("fiscal_groups") )
     end
@@ -200,15 +206,17 @@ function mspos:printCheque ( ... )
     self:log( "haveWrongTaxation:", haveWrongTaxation )
     self:log( "dataOutItemsByTaxation:", dataOutItemsByTaxation )
 
-    if ( haveEmptyTaxation and haveNotEmptyTaxation ) then
+    --if ( haveEmptyTaxation and haveNotEmptyTaxation ) then
+    if ( haveEmptyTaxation and isThereGroupsWithNonZeroTaxations ) then
         self.lastErrorCode = lastErrorCodeFail
-        self.lastErrorDescription = "Найдены товары одновременно с явно и неявно (0) указанной системой налогообложения"
+        --self.lastErrorDescription = "Найдены товары одновременно с явно и неявно (0) указанной системой налогообложения"
+        self.lastErrorDescription = "Найдены товары с незаполненной системой налогообложения"
         return resFail
     end
 
     if ( haveWrongTaxation ) then
         self.lastErrorCode = lastErrorCodeFail
-        self.lastErrorDescription = "Найдены товары с незапрограммированной системой налогообложения"
+        self.lastErrorDescription = "Найдены товары с недопустимой системой налогообложения"
         return resFail
     end
 
