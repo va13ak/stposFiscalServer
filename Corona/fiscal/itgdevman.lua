@@ -22,7 +22,6 @@ function itgdevman:fillCashier( data )
     data.cpwd = ""
 end
 
-
 function itgdevman:callDeviceManager( data, ... )
     self:fillCashier( data )
 
@@ -46,43 +45,47 @@ function itgdevman:callDeviceManager( data, ... )
     local jsonData = json.prettify(reqData)
 
     if self.debugMode then
-        self:log( "debugMode:", jsonData )
-        self.lastErrorCode = 0
-        self.lastErrorDescription = ""
-        return resOK
-    end
-
-	if myPrinter then
+        -- debug mode
     else
-	   self:log( "myPrinter module not found" )
-       self.lastErrorCode = lastErrorCodeFail
-       self.lastErrorDescription = "myPrinter module not found"
-       return resFail
-	end
+        if myPrinter then
+        else
+           self:log( "myPrinter module not found" )
+           self.lastErrorCode = lastErrorCodeFail
+           self.lastErrorDescription = "myPrinter module not found"
+           return resFail
+        end
 
-    if myPrinter.itgDeviceManager then
-    else
-       self:log( "myPrinter.itgDeviceManager() method not found" )
-       self.lastErrorCode = lastErrorCodeFail
-       self.lastErrorDescription = "myPrinter.itgDeviceManager() method not found"
-       return resFail
+        if myPrinter.itgDeviceManager then
+        else
+           self:log( "myPrinter.itgDeviceManager() method not found" )
+           self.lastErrorCode = lastErrorCodeFail
+           self.lastErrorDescription = "myPrinter.itgDeviceManager() method not found"
+           return resFail
+        end
     end
 
     self:log( "\n=== send data:", jsonData )
 
     local callbackFunction = function ( status, ... )
-        self:log( "status:", status, ... )
-        local onEndPrint = self.fiscalServer:getOnEndPrint()
+        self:log( "status:", status, arg[1], arg[2] )
+        local onEndPrint = self.onEndPrint
         local result = status
         if status then
             local resultCode = arg[1]
             if resultCode == -1 then
                 local respDataString = arg[2]
                 local respData = json.decode( respDataString )
-                if respData.res == 0 then -- ok
+                if ( respData.res ) then
+                    if ( respData.res == 0 ) or ( respData.res == "0" ) then -- ok
+                        self.lastErrorCode = 0
+                        self.lastErrorDescription = respData.errortxt
+                    else
+                        self.lastErrorCode = respData.res
+                        self.lastErrorDescription = respData.errortxt
+                    end
                 else
-                    self.lastErrorCode = respData.res
-                    self.lastErrorDescription = respData.errortxt
+                    self.lastErrorCode = lastErrorCodeFail
+                    self.lastErrorDescription = "parameter \"res\" is missing in device manager's reply"
                 end
             
             else
@@ -97,6 +100,8 @@ function itgdevman:callDeviceManager( data, ... )
 
         local result = self.fiscalServer:checkError( self )
 
+        self:log( "self.fiscalServer:checkError( self )", result )
+
         self.lastSessionLog = nil
 
         self.lastErrorCode = 0
@@ -106,7 +111,17 @@ function itgdevman:callDeviceManager( data, ... )
     end
 
     --local res, ret2 = myPrinter.itgDeviceManager( jsonData, callbackFunction );
-    local res = myPrinter.itgDeviceManager( jsonData, callbackFunction )
+    local res
+    if self.debugMode then
+        self:log( "there is must starting test callback" )
+        --local callBackEx = function () return callbackFunction( true, -1, '{"ver":"1","device":"datecs12","tag":"0","sign":"HT65rtgftRTHR#$%*","res":"0"}' ) end
+        local callBackEx = function () return callbackFunction( true, -1, '{"ver":"1","device":"datecs12","tag":"0","sign":"HT65rtgftRTHR#$%*","res":"1","errortxt":"Error 234. Can\'t found device \'datecs12\'."}' ) end
+        timer.performWithDelay( 1000, callBackEx, 1 )
+        res = nil
+        self:log( "there is callback must be started in 1000 ms" )
+    else
+        res = myPrinter.itgDeviceManager( jsonData, callbackFunction )
+    end
 
     local errorCode
     if res then
@@ -116,7 +131,7 @@ function itgdevman:callDeviceManager( data, ... )
     else
         self.lastErrorCode = 0
         self.lastErrorDescription = ""
-        errorCode = resOK
+        errorCode = nil -- second parameter is nil, not resOK; because the process still running and we should tell it to server's executeDirect
 
         --[[
         self:log( "\n=== get data:", ret2 )

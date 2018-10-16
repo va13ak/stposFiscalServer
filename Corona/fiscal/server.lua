@@ -117,6 +117,7 @@ function fiscalServer:executeDirect( f, ... )
 		end
 
 		if processStillRunning then
+
 		else
 			self.device.lastSessionLog = nil
 
@@ -126,7 +127,10 @@ function fiscalServer:executeDirect( f, ... )
 	end
 
 	if processStillRunning then
+		self:log( "processStillRunning" )
+		self.device.onEndPrint = self:getOnEndPrint( ... )
 	else
+		self:log( "processStillRunning is false: process finalizes now" )
 		self:runOnEndPrint( self:getOnEndPrint( ... ), result )
 	end
 
@@ -148,12 +152,13 @@ function fiscalServer:getOnEndPrint( ... )
 end
 
 function fiscalServer:runOnEndPrint( onEndPrint, result )
+	self:log( "onEndPrint:", onEndPrint, "; resul:", result )
 	if onEndPrint then
-		self:log( "---!!!========", "onEndPrintEnd", onEndPrint)
-		self:log( "---!!!========", "Spinner", Spinner)
+		self:log( "---!!!========", "onEndPrintEnd", onEndPrint )
+		self:log( "---!!!========", "Spinner", Spinner )
 		if Spinner then
 			Spinner:stop()
-			self:log( "---!!!========", "SpinnerStoped", Spinner)
+			self:log( "---!!!========", "SpinnerStoped", Spinner )
 		end
 		onEndPrint( result ~= true )
 		onEndPrint = nil
@@ -184,17 +189,61 @@ function fiscalServer:execute( ... )
 	return unpack2( results )
 end
 
+local function parseTable( t, ... )
+	if table.indexOf( alreadyProcessedTables, tostring( t ) ) then
+		return ": { .~. }, "
+	end
+
+	local maxLevel = arg[1] or 2
+	local alreadyProcessedTables = arg[2]
+	local curLevel = 1 + ( arg[3] or 0 )
+	local align = ( arg[4] or "" ) .. "     "
+	if ( maxLevel < curLevel ) then
+		return ": { ... }, "
+	end
+
+	local stringForPrint = ""
+
+	stringForPrint = stringForPrint .. ": {\n" .. align
+
+	for _k, _v in pairs( t ) do
+		if ( _k == "ldb" ) then
+		elseif ( _k == "lastSessionLog" ) then
+		elseif ( type( _v ) == "function" ) then
+		elseif ( type( _v ) == "table" ) then
+			stringForPrint = stringForPrint .. _k .. "=" .. tostring( _v )
+			stringForPrint = stringForPrint .. parseTable( _v, maxLevel, alreadyProcessedTables, curLevel, align ) .. "\n" .. align
+		else
+			stringForPrint = stringForPrint .. _k .. "=" .. tostring( _v ) .. ", "
+		end
+	end
+	
+	stringForPrint = stringForPrint .. "}"
+	if curLevel > 1 then
+		stringForPrint = stringForPrint .. ","
+	end
+
+	table.insert( alreadyProcessedTables, tostring( t ) )
+
+	return stringForPrint
+end
+
 function fiscalServer:log( ... )
 	local currTime = os.time()
 	-- local currTime = os.time(os.date( "*t" )
 	local stringForPrint = ""
 	--local stringForPrint = "===== "
+
+	local alreadyProcessedTables = {}
+
 	for i, v in ipairs( arg ) do
 		if stringForPrint ~= "" then
 			stringForPrint = stringForPrint .. " "
 		end
 		stringForPrint = stringForPrint .. tostring( v )
 		if ( type( v ) == "table" ) then
+			stringForPrint = stringForPrint .. parseTable ( v, 3, alreadyProcessedTables )
+--[[
 			stringForPrint = stringForPrint .. ": { "
 			for _k, _v in pairs( v ) do
 --				if type( _v ) == "function" then
@@ -204,6 +253,7 @@ function fiscalServer:log( ... )
 --				end
 			end
 			stringForPrint = stringForPrint .. "}"
+]]
 		end
 	end
 
@@ -280,7 +330,7 @@ end
 
 function fiscalServer:getDevice( ... )
 	local devId = self.defId
-	self:log ( arg )
+	--self:log ( arg )
 	if arg[1] then
 		if ( type( arg[1] ) == "table" ) then
 			devId = self:getDeviceId( arg[1] )
