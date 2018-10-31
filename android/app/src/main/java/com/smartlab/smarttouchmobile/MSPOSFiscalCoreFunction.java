@@ -5,7 +5,14 @@
 
 package com.smartlab.smarttouchmobile;
 
+import android.app.AlertDialog;
+import android.content.DialogInterface;
+import android.content.Intent;
 import android.util.Log;
+
+import com.ansca.corona.CoronaActivity;
+import com.ansca.corona.CoronaActivityInfo;
+import com.ansca.corona.CoronaEnvironment;
 
 import java.util.HashMap;
 
@@ -14,6 +21,8 @@ import java.util.HashMap;
  */
 class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
     private static final String TAG = "smarttouchpos";
+    private static String INTENT_ACTION = "com.smartlab.msposservicetool.SERVICE_TOOL_TASK";
+    private static String SERVICE_TOOL_PACKAGE_NAME = "com.smartlab.msposservicetool";
 
     /**
      * Gets the name of the Lua function as it would appear in the Lua script.
@@ -102,6 +111,127 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
         return data;
     }
 
+    public void runServiceTool(com.naef.jnlua.LuaState luaState) {
+        // Set up a dispatcher which allows us to send a task to the Corona runtime thread from another thread.
+        // This way we can call the given Lua function on the same thread that Lua runs in.
+        // This dispatcher will only send tasks to the Corona runtime that owns the given Lua state object.
+        // Once the Corona runtime is disposed/destroyed, which happens when the Corona activity is destroyed,
+        // then this dispatcher will no longer be able to send tasks.
+        final com.ansca.corona.CoronaRuntimeTaskDispatcher dispatcher =
+                new com.ansca.corona.CoronaRuntimeTaskDispatcher(luaState);
+
+        // Post a Runnable object on the UI thread that will call the given Lua function.
+        com.ansca.corona.CoronaEnvironment.getCoronaActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                // *** We are now running in the main UI thread. ***
+
+                try {
+
+                    CoronaActivity activity = CoronaEnvironment.getCoronaActivity();
+                    if (activity != null) {
+                        Intent intent = CoronaEnvironment.getApplicationContext().getPackageManager().getLaunchIntentForPackage(SERVICE_TOOL_PACKAGE_NAME);
+                        //Intent intent = new Intent(INTENT_ACTION);
+                        if (intent != null) {
+                            //intent.putExtra(EXTRA_DATA, TEST_DATA);
+                            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                            activity.startActivity(intent);
+
+                            Log.i(TAG, "ACTIVITY JUST STARTED");
+                            System.out.println("ACTIVITY JUST STARTED");
+                        } else {
+                            AlertDialog.Builder dialog = new AlertDialog.Builder(activity);
+                            dialog.setMessage("Service tool is not installed!").setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    // DO NOTHING
+                                }
+                            });
+                            dialog.show();
+                        }
+                    }
+
+                }
+                catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+
+//                // Create a task that will call the given Lua function.
+//                // This task's execute() method will be called on the Corona runtime thread, just before rendering a frame.
+//                com.ansca.corona.CoronaRuntimeTask task = new com.ansca.corona.CoronaRuntimeTask() {
+//                    @Override
+//                    public void executeUsing(com.ansca.corona.CoronaRuntime runtime) {
+//                        // *** We are now running on the Corona runtime thread. ***
+//                        String errorMessage = null;
+//                        try {
+//
+//                            CoronaActivity activity = CoronaEnvironment.getCoronaActivity();
+//                            if (activity != null) {
+//                                Intent intent = CoronaEnvironment.getApplicationContext().getPackageManager().getLaunchIntentForPackage(INTENT_ACTION);
+//                                if (intent != null) {
+//                                    //Intent intent = new Intent(INTENT_ACTION);
+//                                    //intent.putExtra(EXTRA_DATA, TEST_DATA);
+//                                    intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+//                                    activity.startActivity(intent);
+//
+//                                    Log.i(TAG, "ACTIVITY JUST STARTED");
+//                                    System.out.println("ACTIVITY JUST STARTED");
+//                                } else {
+//                                    AlertDialog.Builder dialog = new AlertDialog.Builder(activity);
+//                                    dialog.setMessage("Service tool is not installed!").setPositiveButton("OK", new DialogInterface.OnClickListener() {
+//                                        @Override
+//                                        public void onClick(DialogInterface dialog, int which) {
+//                                            // DO NOTHING
+//                                        }
+//                                    });
+//                                    dialog.show();
+//                                }
+//                            }
+//
+//                        }
+//                        catch (Exception ex) {
+//                            ex.printStackTrace();
+//                            errorMessage = ex.toString();
+//                        }
+//
+//                        if (errorMessage != null) {
+////                            try {
+////
+////                                // Fetch the Corona runtime's Lua state.
+////                                com.naef.jnlua.LuaState luaState = runtime.getLuaState();
+////
+////                                // Fetch the Lua function stored in the registry and push it to the top of the stack.
+////                                luaState.rawGet(com.naef.jnlua.LuaState.REGISTRYINDEX, luaFunctionReferenceKey);
+////
+////                                // Remove the Lua function from the registry.
+////                                luaState.unref(com.naef.jnlua.LuaState.REGISTRYINDEX, luaFunctionReferenceKey);
+////
+////                                // Call the Lua function that was just pushed to the top of the stack.
+////                                // The 1st argument indicates the number of arguments that we are passing to the Lua function.
+////                                // The 2nd argument indicates the number of return values to accept from the Lua function.
+////                                // Note: If you want to call the Lua function with arguments, then you need to push each argument
+////                                //       value to the luaState object's stack.
+////                                luaState.pushBoolean(false);     // operation unsuccessful
+////                                luaState.pushString(errorMessage);  // error message
+////                                luaState.pushNil();                 // empty third argument
+////                                luaState.call(3, 0);
+////                            }
+////                            catch (Exception ex) {
+////                                ex.printStackTrace();
+////                            }
+//                        }
+//                    }
+//                };
+//
+//                // Send the above task to the Corona runtime asynchronously.
+//                // The send() method will do nothing if the Corona runtime is no longer available, which can
+//                // happen if the runtime was disposed/destroyed after the user has exited the Corona activity.
+//                dispatcher.send(task);
+            }
+        });
+
+    }
+
     /**
      * This method is called when the Lua function is called.
      * <p>
@@ -117,73 +247,36 @@ class MSPOSFiscalCoreFunction implements com.naef.jnlua.NamedJavaFunction {
         int resCount = 0;
 
         try {
-            MSPOSFiscalCoreBridge msposFiscalCoreBridge = new MSPOSFiscalCoreBridge();
+
             String funcName = luaState.checkString(1);
             Log.i(TAG, "funcName: \"" + funcName + "\"");
             System.out.println("funcName: \"" + funcName + "\"");
-            /*
-            switch (funcName) {
-                case "init":
-                    msposFiscalCoreBridge.initialize();
-                    break;
-                case "shutdown":
-                    msposFiscalCoreBridge.deInitialize();
-                    break;
 
-                case "printXReport":
-                    msposFiscalCoreBridge.printXReport();
-                    break;
-                case "printZReport":
-                    msposFiscalCoreBridge.printZReport();
-                    break;
+            if (funcName.equals("runServiceTool")) runServiceTool(luaState);   // 20181031
+            else {
+                MSPOSFiscalCoreBridge msposFiscalCoreBridge = new MSPOSFiscalCoreBridge();
 
-                case "printCheque":
+                if (funcName.equals("init")) msposFiscalCoreBridge.initialize();
+                else if (funcName.equals("shutdown")) msposFiscalCoreBridge.deInitialize();
+                else if (funcName.equals("printXReport")) msposFiscalCoreBridge.printXReport();
+                else if (funcName.equals("printZReport")) msposFiscalCoreBridge.printZReport();
+                else if (funcName.equals("printCorrectionCheque")) {
+                    // Check if the Lua function's first argument is a Lua table.
+                    // Will throw an exception if it is not a table or if no argument was given.
+                    luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
+                    msposFiscalCoreBridge.printCorrectionCheque(extractData(luaState, 2));
+                } else if (funcName.equals("printCheque")) {
                     // Check if the Lua function's first argument is a Lua table.
                     // Will throw an exception if it is not a table or if no argument was given.
                     luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
                     msposFiscalCoreBridge.printCheque(extractData(luaState, 2));
-                    break;
-
-                case "cancelCheque":
-                    msposFiscalCoreBridge.cancelCheque();
-                    break;
-
-                case "printEmptyCheque":
-                    msposFiscalCoreBridge.printEmptyCheque();
-                    break;
-
-                case "printNonFiscalCheque":
-                    msposFiscalCoreBridge.printNonFiscalCheque(luaState.checkString(2));
-                    break;
-
-                case "cashIn":
-                    msposFiscalCoreBridge.cashIn(luaState.checkString(2));
-                    break;
-                case "cashOut":
-                    msposFiscalCoreBridge.cashOut(luaState.checkString(2));
-                    break;
+                } else if (funcName.equals("cancelCheque")) msposFiscalCoreBridge.cancelCheque();
+                else if (funcName.equals("printEmptyCheque")) msposFiscalCoreBridge.printEmptyCheque();
+                else if (funcName.equals("printNonFiscalCheque")) msposFiscalCoreBridge.printNonFiscalCheque(luaState.checkString(2));
+                else if (funcName.equals("cashIn")) msposFiscalCoreBridge.cashIn(luaState.checkString(2));
+                else if (funcName.equals("cashOut")) msposFiscalCoreBridge.cashOut(luaState.checkString(2));
+                else if (funcName.equals("getTaxation")) result1 = msposFiscalCoreBridge.getTaxation();
             }
-            */
-            if (funcName.equals("init")) msposFiscalCoreBridge.initialize();
-            else if (funcName.equals("shutdown")) msposFiscalCoreBridge.deInitialize();
-            else if (funcName.equals("printXReport")) msposFiscalCoreBridge.printXReport();
-            else if (funcName.equals("printZReport")) msposFiscalCoreBridge.printZReport();
-            else if (funcName.equals("printCorrectionCheque")) {
-                // Check if the Lua function's first argument is a Lua table.
-                // Will throw an exception if it is not a table or if no argument was given.
-                luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
-                msposFiscalCoreBridge.printCorrectionCheque(extractData(luaState, 2));
-            } else if (funcName.equals("printCheque")) {
-                // Check if the Lua function's first argument is a Lua table.
-                // Will throw an exception if it is not a table or if no argument was given.
-                luaState.checkType(2, com.naef.jnlua.LuaType.TABLE);
-                msposFiscalCoreBridge.printCheque(extractData(luaState, 2));
-            } else if (funcName.equals("cancelCheque")) msposFiscalCoreBridge.cancelCheque();
-            else if (funcName.equals("printEmptyCheque")) msposFiscalCoreBridge.printEmptyCheque();
-            else if (funcName.equals("printNonFiscalCheque")) msposFiscalCoreBridge.printNonFiscalCheque(luaState.checkString(2));
-            else if (funcName.equals("cashIn")) msposFiscalCoreBridge.cashIn(luaState.checkString(2));
-            else if (funcName.equals("cashOut")) msposFiscalCoreBridge.cashOut(luaState.checkString(2));
-            else if (funcName.equals("getTaxation")) result1 = msposFiscalCoreBridge.getTaxation();
 
 //            // Check if the first argument is a function.
 //            // Will throw an exception if not or if no argument is given.
